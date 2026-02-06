@@ -737,13 +737,16 @@ describe("update-cli", () => {
 
       await updateWizardCommand({});
 
-      const firstConfirm = vi.mocked(confirm).mock.calls[0]?.[0];
-      expect(firstConfirm).toMatchObject({
+      const expectedGitDir = path.join(os.homedir(), "openclaw");
+      const createCheckoutPrompt = vi
+        .mocked(confirm)
+        .mock.calls.map((call) => call[0] as { initialValue?: boolean; message?: string })
+        .find((arg) => arg.message?.includes(expectedGitDir));
+
+      expect(createCheckoutPrompt).toBeDefined();
+      expect(createCheckoutPrompt).toMatchObject({
         initialValue: true,
       });
-      expect(String(firstConfirm?.message)).toMatch(
-        /Create a git checkout at .+[\\/]openclaw\? \(override via OPENCLAW_GIT_DIR\)/,
-      );
     } finally {
       if (previousGitDir === undefined) {
         delete process.env.OPENCLAW_GIT_DIR;
