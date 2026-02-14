@@ -189,6 +189,12 @@ function extractMessageText(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const rec = content as { type?: unknown; text?: unknown };
+    if (rec.type === "text" && typeof rec.text === "string") {
+      return rec.text;
+    }
+  }
   if (!Array.isArray(content)) {
     return "";
   }
@@ -222,7 +228,7 @@ function formatRecentMessagesSection(messages: AgentMessage[]): string {
       continue;
     }
     if (text.length > MAX_MESSAGE_PREVIEW_CHARS) {
-      text = `${text.slice(0, MAX_MESSAGE_PREVIEW_CHARS)}...`;
+      text = `${text.slice(0, Math.max(0, MAX_MESSAGE_PREVIEW_CHARS - 3))}...`;
     }
     const label = role === "user" ? "**User**" : "**Assistant**";
     lines.push(`${label}: ${text.replace(/\n/g, " ").trim()}`);
@@ -420,6 +426,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
 export const __testing = {
   collectToolFailures,
   formatToolFailuresSection,
+  formatRecentMessagesSection,
   computeAdaptiveChunkRatio,
   isOversizedForSummary,
   BASE_CHUNK_RATIO,
