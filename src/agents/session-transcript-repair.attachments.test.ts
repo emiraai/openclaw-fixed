@@ -64,9 +64,11 @@ describe("sanitizeToolCallInputs redacts sessions_spawn attachments", () => {
     const out = sanitizeToolCallInputs(input);
     const msg = out[0] as { content?: unknown[] };
     const tool = (msg.content?.[0] ?? null) as {
+      // Some providers emit tool calls as `input`/`toolUse`. We normalize to `toolCall` with `arguments`.
       input?: { attachments?: Array<{ content?: string }> };
+      arguments?: { attachments?: Array<{ content?: string }> };
     } | null;
-    expect(tool?.input?.attachments?.[0]?.content).toBe("__OPENCLAW_REDACTED__");
+    expect(tool?.arguments?.attachments?.[0]?.content).toBe("__OPENCLAW_REDACTED__");
     expect(JSON.stringify(out)).not.toContain(secret);
   });
 });

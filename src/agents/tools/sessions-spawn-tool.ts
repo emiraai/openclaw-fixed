@@ -417,11 +417,11 @@ export function createSessionsSpawnTool(opts?: {
 
             let buf: Buffer;
             if (encoding === "base64") {
-              const strict = decodeStrictBase64(content, maxFileBytes);
-              if (!strict) {
+              const strictBuf = decodeStrictBase64(content, maxFileBytes);
+              if (!strictBuf) {
                 fail("attachments_invalid_base64_or_too_large");
               }
-              buf = strict;
+              buf = strictBuf!;
             } else {
               buf = Buffer.from(content, "utf8");
             }
@@ -537,7 +537,7 @@ export function createSessionsSpawnTool(opts?: {
         runTimeoutSeconds,
         attachmentsDir: attachmentAbsDir,
         attachmentsRootDir: attachmentRootDir,
-        retainAttachmentsOnKeep,
+        retainAttachmentsOnKeep: retainOnSessionKeep,
       });
 
       return jsonResult({
