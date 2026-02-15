@@ -1,0 +1,44 @@
+import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { describe, it, expect } from "vitest";
+import { sanitizeToolCallInputs } from "./session-transcript-repair.js";
+
+function mkSessionsSpawnToolCall(content: string): AgentMessage {
+  return {
+    role: "assistant",
+    content: [
+      {
+        type: "toolCall",
+        id: "call_1",
+        name: "sessions_spawn",
+        arguments: {
+          task: "do thing",
+          attachments: [
+            {
+              name: "README.md",
+              encoding: "utf8",
+              content,
+            },
+          ],
+        },
+      },
+    ],
+    timestamp: Date.now(),
+  } as AgentMessage;
+}
+
+describe("sanitizeToolCallInputs redacts sessions_spawn attachments", () => {
+  it("replaces attachments[].content with __OPENCLAW_REDACTED__", () => {
+    const secret = "SUPER_SECRET_SHOULD_NOT_PERSIST";
+    const input = [mkSessionsSpawnToolCall(secret)];
+    const out = sanitizeToolCallInputs(input);
+    expect(out).toHaveLength(1);
+    const msg = out[0] as { content?: unknown[] };
+    const tool = (msg.content?.[0] ?? null) as {
+      name?: string;
+      arguments?: { attachments?: Array<{ content?: string }> };
+    } | null;
+    expect(tool?.name).toBe("sessions_spawn");
+    expect(tool?.arguments?.attachments?.[0]?.content).toBe("__OPENCLAW_REDACTED__");
+    expect(JSON.stringify(out)).not.toContain(secret);
+  });
+});

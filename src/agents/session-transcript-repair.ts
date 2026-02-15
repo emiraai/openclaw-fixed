@@ -39,6 +39,43 @@ function hasToolCallName(block: ToolCallBlock): boolean {
   return hasNonEmptyStringField(block.name);
 }
 
+function redactSessionsSpawnAttachmentsArgs(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const rec = value as Record<string, unknown>;
+  const raw = rec.attachments;
+  if (!Array.isArray(raw)) {
+    return value;
+  }
+  const next = raw.map((item) => {
+    if (!item || typeof item !== "object") {
+      return item;
+    }
+    const a = item as Record<string, unknown>;
+    if (!Object.hasOwn(a, "content")) {
+      return item;
+    }
+    const { content: _content, ...rest } = a;
+    return { ...rest, content: "__OPENCLAW_REDACTED__" };
+  });
+  return { ...rec, attachments: next };
+}
+
+function sanitizeToolCallBlock(block: ToolCallBlock): ToolCallBlock {
+  const name = typeof block.name === "string" ? block.name : undefined;
+  if (name !== "sessions_spawn") {
+    return block;
+  }
+  // Redact large/sensitive inline attachment content from persisted transcripts.
+  const nextArgs = redactSessionsSpawnAttachmentsArgs(block.arguments);
+  const nextInput = redactSessionsSpawnAttachmentsArgs(block.input);
+  if (nextArgs === block.arguments && nextInput === block.input) {
+    return block;
+  }
+  return { ...block, arguments: nextArgs, input: nextInput };
+}
+
 function makeMissingToolResult(params: {
   toolCallId: string;
   toolName?: string;
@@ -104,6 +141,7 @@ export function repairToolCallInputs(messages: AgentMessage[]): ToolCallInputRep
 
     const nextContent = [];
     let droppedInMessage = 0;
+    let messageChanged = false;
 
     for (const block of msg.content) {
       if (
@@ -113,6 +151,16 @@ export function repairToolCallInputs(messages: AgentMessage[]): ToolCallInputRep
         droppedToolCalls += 1;
         droppedInMessage += 1;
         changed = true;
+        messageChanged = true;
+        continue;
+      }
+      if (isToolCallBlock(block)) {
+        const sanitized = sanitizeToolCallBlock(block);
+        if (sanitized !== block) {
+          changed = true;
+          messageChanged = true;
+        }
+        nextContent.push(sanitized);
         continue;
       }
       nextContent.push(block);
@@ -124,6 +172,11 @@ export function repairToolCallInputs(messages: AgentMessage[]): ToolCallInputRep
         changed = true;
         continue;
       }
+      out.push({ ...msg, content: nextContent });
+      continue;
+    }
+
+    if (messageChanged) {
       out.push({ ...msg, content: nextContent });
       continue;
     }
