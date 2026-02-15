@@ -86,7 +86,7 @@ function normalizeModelSelection(value: unknown): string | undefined {
   return undefined;
 }
 
-function decodeStrictBase64(value: string): Buffer | null {
+function decodeStrictBase64(value: string, maxDecodedBytes: number): Buffer | null {
   const normalized = value.replace(/\s+/g, "");
   if (!normalized || normalized.length % 4 !== 0) {
     return null;
@@ -94,7 +94,14 @@ function decodeStrictBase64(value: string): Buffer | null {
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
     return null;
   }
+  const maxEncodedBytes = Math.ceil(maxDecodedBytes / 3) * 4;
+  if (normalized.length > maxEncodedBytes) {
+    return null;
+  }
   const decoded = Buffer.from(normalized, "base64");
+  if (decoded.byteLength > maxDecodedBytes) {
+    return null;
+  }
   const roundtrip = decoded.toString("base64");
   if (roundtrip !== normalized) {
     return null;
@@ -351,6 +358,7 @@ export function createSessionsSpawnTool(opts?: {
           }
         | undefined;
       let attachmentAbsDir: string | undefined;
+      let attachmentRootDir: string | undefined;
 
       if (requestedAttachments.length > 0) {
         if (!attachmentsEnabled) {
@@ -369,9 +377,11 @@ export function createSessionsSpawnTool(opts?: {
 
         const attachmentId = crypto.randomUUID();
         const childWorkspaceDir = resolveAgentWorkspaceDir(cfg, targetAgentId);
+        const absRootDir = path.join(childWorkspaceDir, ".openclaw", "attachments");
         const relDir = path.posix.join(".openclaw", "attachments", attachmentId);
-        const absDir = path.join(childWorkspaceDir, ".openclaw", "attachments", attachmentId);
+        const absDir = path.join(absRootDir, attachmentId);
         attachmentAbsDir = absDir;
+        attachmentRootDir = absRootDir;
 
         const fail = (error: string): never => {
           throw new Error(error);
@@ -407,9 +417,9 @@ export function createSessionsSpawnTool(opts?: {
 
             let buf: Buffer;
             if (encoding === "base64") {
-              const strict = decodeStrictBase64(content);
+              const strict = decodeStrictBase64(content, maxFileBytes);
               if (!strict) {
-                fail("attachments_invalid_base64");
+                fail("attachments_invalid_base64_or_too_large");
               }
               buf = strict;
             } else {
@@ -526,6 +536,7 @@ export function createSessionsSpawnTool(opts?: {
         model: resolvedModel,
         runTimeoutSeconds,
         attachmentsDir: attachmentAbsDir,
+        attachmentsRootDir: attachmentRootDir,
         retainAttachmentsOnKeep,
       });
 
