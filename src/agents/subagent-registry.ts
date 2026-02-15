@@ -257,6 +257,8 @@ async function sweepSubagentRuns() {
     }
     subagentRuns.delete(runId);
     mutated = true;
+    // Archive/purge is terminal for the run record; remove any retained attachments too.
+    await safeRemoveAttachmentsDir(entry);
     try {
       await callGateway({
         method: "sessions.delete",

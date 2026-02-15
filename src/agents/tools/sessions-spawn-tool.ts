@@ -510,8 +510,8 @@ export function createSessionsSpawnTool(opts?: {
           childRunId = response.runId;
         }
       } catch (err) {
-        const shouldDeleteAttachments = cleanup === "delete" || !retainOnSessionKeep;
-        if (attachmentAbsDir && shouldDeleteAttachments) {
+        // Spawn failed before registry enrollment; always remove staged attachments.
+        if (attachmentAbsDir) {
           await fs.rm(attachmentAbsDir, { recursive: true, force: true });
         }
         const messageText =
