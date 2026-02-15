@@ -525,6 +525,8 @@ export function createSessionsSpawnTool(opts?: {
         label: label || undefined,
         model: resolvedModel,
         runTimeoutSeconds,
+        attachmentsDir: attachmentAbsDir,
+        retainAttachmentsOnKeep,
       });
 
       return jsonResult({
