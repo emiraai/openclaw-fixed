@@ -409,9 +409,13 @@ describe("local media root guard", () => {
     const targetPath = path.join(stateDir, "workspace-clawdy", "tmp", "render.bin");
 
     const defaults = getDefaultLocalRoots();
+    const normalizeForCompare = (value: string) => {
+      const resolved = path.resolve(value);
+      return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    };
     const coveredByDefault = defaults.some((root) => {
-      const resolvedRoot = path.resolve(root);
-      const resolvedTarget = path.resolve(targetPath);
+      const resolvedRoot = normalizeForCompare(root);
+      const resolvedTarget = normalizeForCompare(targetPath);
       return (
         resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)
       );
