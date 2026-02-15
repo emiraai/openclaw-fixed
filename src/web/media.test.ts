@@ -413,13 +413,20 @@ describe("local media root guard", () => {
       const resolved = path.resolve(value);
       return process.platform === "win32" ? resolved.toLowerCase() : resolved;
     };
-    const coveredByDefault = defaults.some((root) => {
-      const resolvedRoot = normalizeForCompare(root);
-      const resolvedTarget = normalizeForCompare(targetPath);
-      return (
-        resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)
-      );
-    });
+    const resolvedTarget = normalizeForCompare(targetPath);
+    const resolvedRoots = await Promise.all(
+      defaults.map(async (root) => {
+        try {
+          return normalizeForCompare(await fs.realpath(root));
+        } catch {
+          return normalizeForCompare(root);
+        }
+      }),
+    );
+    const coveredByDefault = resolvedRoots.some(
+      (resolvedRoot) =>
+        resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`),
+    );
 
     if (coveredByDefault) {
       await expect(
