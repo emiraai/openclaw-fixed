@@ -23,7 +23,7 @@ function mkSessionsSpawnToolCall(content: string): AgentMessage {
       },
     ],
     timestamp: Date.now(),
-  } as AgentMessage;
+  } as unknown as AgentMessage;
 }
 
 describe("sanitizeToolCallInputs redacts sessions_spawn attachments", () => {
@@ -59,7 +59,7 @@ describe("sanitizeToolCallInputs redacts sessions_spawn attachments", () => {
           },
         ],
       },
-    ] as AgentMessage[];
+    ] as unknown as AgentMessage[];
 
     const out = sanitizeToolCallInputs(input);
     const msg = out[0] as { content?: unknown[] };

@@ -420,6 +420,7 @@ export function createSessionsSpawnTool(opts?: {
               const strictBuf = decodeStrictBase64(content, maxFileBytes);
               if (!strictBuf) {
                 fail("attachments_invalid_base64_or_too_large");
+                throw new Error("unreachable");
               }
               buf = strictBuf;
             } else {
