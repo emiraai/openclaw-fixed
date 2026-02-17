@@ -328,16 +328,34 @@ async function safeRemoveAttachmentsDir(entry: SubagentRunRecord): Promise<void>
   if (!entry.attachmentsDir || !entry.attachmentsRootDir) {
     return;
   }
+
+  const resolveReal = async (targetPath: string): Promise<string | null> => {
+    try {
+      return await fs.realpath(targetPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+        return null;
+      }
+      throw err;
+    }
+  };
+
   try {
     const [rootReal, dirReal] = await Promise.all([
-      fs.realpath(entry.attachmentsRootDir),
-      fs.realpath(entry.attachmentsDir),
+      resolveReal(entry.attachmentsRootDir),
+      resolveReal(entry.attachmentsDir),
     ]);
-    const rootWithSep = rootReal.endsWith(path.sep) ? rootReal : `${rootReal}${path.sep}`;
-    if (!dirReal.startsWith(rootWithSep)) {
+    if (!dirReal) {
       return;
     }
-    await fs.rm(dirReal, { recursive: true, force: true });
+
+    const rootBase = rootReal ?? path.resolve(entry.attachmentsRootDir);
+    const dirBase = rootReal ? dirReal : path.resolve(entry.attachmentsDir);
+    const rootWithSep = rootBase.endsWith(path.sep) ? rootBase : `${rootBase}${path.sep}`;
+    if (!dirBase.startsWith(rootWithSep)) {
+      return;
+    }
+    await fs.rm(dirBase, { recursive: true, force: true });
   } catch {
     // best effort
   }
