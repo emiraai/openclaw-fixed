@@ -331,8 +331,9 @@ describe("commands registry args", () => {
       model: "gpt-5.2-codex",
     });
     expect(menu?.choices.length).toBeGreaterThan(0);
-    expect(seen?.provider).toBe("github-copilot");
-    expect(seen?.model).toBe("gpt-5.2-codex");
+    const seenChoice = seen as { provider?: string; model?: string } | null;
+    expect(seenChoice?.provider).toBe("github-copilot");
+    expect(seenChoice?.model).toBe("gpt-5.2-codex");
   });
 
   it("does not show menus when args were provided as raw text only", () => {
