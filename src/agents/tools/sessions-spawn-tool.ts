@@ -422,8 +422,8 @@ export function createSessionsSpawnTool(opts?: {
             let buf: Buffer;
             if (encoding === "base64") {
               const strictBuf = decodeStrictBase64(content, maxFileBytes);
-              if (!strictBuf) {
-                fail("attachments_invalid_base64_or_too_large");
+              if (strictBuf === null) {
+                throw new Error("attachments_invalid_base64_or_too_large");
               }
               buf = strictBuf;
             } else {
