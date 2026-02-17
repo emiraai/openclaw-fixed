@@ -421,7 +421,7 @@ export function createSessionsSpawnTool(opts?: {
               if (!strictBuf) {
                 fail("attachments_invalid_base64_or_too_large");
               }
-              buf = strictBuf!;
+              buf = strictBuf;
             } else {
               buf = Buffer.from(content, "utf8");
             }
