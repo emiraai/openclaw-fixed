@@ -624,11 +624,15 @@ describe("runMessageAction sandboxed media validation", () => {
       });
 
       expect(result.kind).toBe("send");
+      if (result.kind !== "send") {
+        throw new Error("expected send result");
+      }
       expect(result.sendResult?.mediaUrl).toBe(tmpFile);
     } finally {
       await fs.rm(sandboxDir, { recursive: true, force: true });
     }
   });
+
 });
 
 describe("runMessageAction media caption behavior", () => {
