@@ -387,6 +387,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Debounce window (ms) for batching rapid inbound messages from the same sender (0 to disable).",
   "channels.telegram.dmPolicy":
     'Direct message access control ("pairing" recommended). "open" requires channels.telegram.allowFrom=["*"].',
+  "channels.telegram.groups.*.trusted":
+    "When true, this group uses the main session key (agent:main:main) instead of an isolated group key, allowing MEMORY.md to be loaded and context to be shared with DMs.",
   "channels.telegram.streamMode":
     "Live stream preview mode for Telegram replies (off | partial | block). Separate from block streaming; uses sendMessage + editMessageText.",
   "channels.telegram.draftChunk.minChars":
