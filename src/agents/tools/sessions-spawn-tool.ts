@@ -87,6 +87,11 @@ function normalizeModelSelection(value: unknown): string | undefined {
 }
 
 function decodeStrictBase64(value: string, maxDecodedBytes: number): Buffer | null {
+  const maxEncodedBytes = Math.ceil(maxDecodedBytes / 3) * 4;
+  // Guard against pathological whitespace-padded inputs before running regex replacement.
+  if (value.length > maxEncodedBytes * 2) {
+    return null;
+  }
   const normalized = value.replace(/\s+/g, "");
   if (!normalized || normalized.length % 4 !== 0) {
     return null;
@@ -94,7 +99,6 @@ function decodeStrictBase64(value: string, maxDecodedBytes: number): Buffer | nu
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
     return null;
   }
-  const maxEncodedBytes = Math.ceil(maxDecodedBytes / 3) * 4;
   if (normalized.length > maxEncodedBytes) {
     return null;
   }
@@ -420,10 +424,15 @@ export function createSessionsSpawnTool(opts?: {
               const strictBuf = decodeStrictBase64(content, maxFileBytes);
               if (!strictBuf) {
                 fail("attachments_invalid_base64_or_too_large");
-                throw new Error("unreachable");
               }
               buf = strictBuf;
             } else {
+              const estimatedBytes = Buffer.byteLength(content, "utf8");
+              if (estimatedBytes > maxFileBytes) {
+                fail(
+                  `attachments_file_bytes_exceeded (name=${name} bytes=${estimatedBytes} maxFileBytes=${maxFileBytes})`,
+                );
+              }
               buf = Buffer.from(content, "utf8");
             }
 
