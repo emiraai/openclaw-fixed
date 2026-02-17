@@ -332,14 +332,14 @@ describe("agent request events", () => {
 
   it("reuses the current session route when delivery target is omitted", async () => {
     const ctx = buildCtx();
-    loadSessionEntryMock.mockReturnValueOnce({
-      ...buildSessionLookup("agent:main:main", {
+    loadSessionEntryMock.mockReturnValueOnce(
+      buildSessionLookup("agent:main:main", {
         sessionId: "sid-current",
+        updatedAt: Date.now(),
         lastChannel: "telegram",
         lastTo: "123",
       }),
-      canonicalKey: "agent:main:main",
-    });
+    );
 
     await handleNodeEvent(ctx, "node-route-hit", {
       event: "agent.request",
