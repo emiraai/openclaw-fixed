@@ -1,5 +1,5 @@
-import type { ReactionBundleContext, ReactionEventItem } from "./types.js";
 import { createInboundDebouncer } from "../../auto-reply/inbound-debounce.js";
+import type { ReactionBundleContext, ReactionEventItem } from "./types.js";
 
 type ReactionDebounceItem = {
   reaction: ReactionEventItem;

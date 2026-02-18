@@ -1,9 +1,9 @@
 import type { ReplyPayload } from "../../auto-reply/types.js";
-import type { ReactionBundleContext } from "./types.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveStorePath } from "../../config/sessions.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { buildReactionPrompt } from "./context-builder.js";
+import type { ReactionBundleContext } from "./types.js";
 
 function resolveReactionReplyPayload(
   replyResult: ReplyPayload | ReplyPayload[] | undefined,

@@ -404,6 +404,7 @@ async function handleDiscordReactionEvent(params: {
 
     if (guildInfo?.reactionDelivery === "immediate") {
       // Immediate delivery path — bypass deferred helpers and route directly
+      const { baseText, contextKey } = resolveReactionBase();
       const emojiLabel = formatDiscordReactionEmoji(data.emoji);
       const actorLabel = formatDiscordUserTag(user);
       const guildSlug =
@@ -417,7 +418,6 @@ async function handleDiscordReactionEvent(params: {
           ? `#${normalizeDiscordSlug(channelName)}`
           : `#${data.channel_id}`;
       const authorLabel = message?.author ? formatDiscordUserTag(message.author) : undefined;
-      const baseText = `Discord reaction ${action}: ${emojiLabel} by ${actorLabel} on ${guildSlug} ${channelLabel} msg ${data.message_id}`;
       const text = authorLabel ? `${baseText} from ${authorLabel}` : baseText;
       const route = resolveAgentRoute({
         cfg: params.cfg,
@@ -467,7 +467,7 @@ async function handleDiscordReactionEvent(params: {
         );
         enqueueSystemEvent(text, {
           sessionKey: route.sessionKey,
-          contextKey: `discord:reaction:${action}:${data.message_id}:${user.id}:${emojiLabel}`,
+          contextKey,
         });
       }
     } else {
