@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { monitorTelegramProvider } from "./monitor.js";
+import { monitorTelegramProvider, __resetInstanceStates } from "./monitor.js";
 
 type MockCtx = {
   message: {
@@ -104,10 +104,18 @@ describe("monitorTelegramProvider (grammY)", () => {
       channels: { telegram: {} },
     });
     initSpy.mockClear();
-    runSpy.mockClear();
+    // Use mockReset to clear both call history AND implementation queue
+    runSpy.mockReset();
+    // Restore default implementation after reset
+    runSpy.mockImplementation(() => ({
+      task: () => Promise.resolve(),
+      stop: vi.fn(),
+    }));
     computeBackoff.mockClear();
     sleepWithAbort.mockClear();
     startTelegramWebhookSpy.mockClear();
+    // Reset instance states between tests
+    __resetInstanceStates();
   });
 
   it("processes a DM and sends reply", async () => {
@@ -242,5 +250,107 @@ describe("monitorTelegramProvider (grammY)", () => {
       }),
     );
     expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it("prevents duplicate instances from starting simultaneously", async () => {
+    const abort1 = new AbortController();
+    let resolveTask1: (() => void) | undefined;
+    const task1Promise = new Promise<void>((resolve) => {
+      resolveTask1 = resolve;
+    });
+    runSpy.mockImplementationOnce(() => ({
+      task: () => task1Promise,
+      stop: vi.fn(() => {
+        resolveTask1?.();
+      }),
+    }));
+
+    const promise1 = monitorTelegramProvider({ token: "tok", abortSignal: abort1.signal });
+
+    // Small delay to let first instance mark as running
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Second call while first is running - should be skipped
+    const promise2 = monitorTelegramProvider({ token: "tok" });
+    await promise2;
+
+    // run should only have been called once (for the first instance)
+    expect(runSpy).toHaveBeenCalledTimes(1);
+
+    // Clean up first instance
+    abort1.abort();
+    await promise1;
+  });
+
+  it("debounces rapid start attempts", async () => {
+    runSpy.mockImplementationOnce(() => ({
+      task: () => Promise.resolve(),
+      stop: vi.fn(),
+    }));
+
+    await monitorTelegramProvider({ token: "tok" });
+
+    // Second call immediately after - should be debounced
+    runSpy.mockImplementationOnce(() => ({
+      task: () => Promise.resolve(),
+      stop: vi.fn(),
+    }));
+
+    await monitorTelegramProvider({ token: "tok" });
+
+    // run should only have been called once (second was debounced)
+    expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows start after debounce period", async () => {
+    let mockTime = 1000000;
+    vi.spyOn(Date, "now").mockImplementation(() => mockTime);
+
+    try {
+      runSpy.mockImplementationOnce(() => ({
+        task: () => Promise.resolve(),
+        stop: vi.fn(),
+      }));
+
+      await monitorTelegramProvider({ token: "tok" });
+      expect(runSpy).toHaveBeenCalledTimes(1);
+
+      // Advance time past debounce period (1500ms)
+      mockTime += 2000;
+
+      runSpy.mockImplementationOnce(() => ({
+        task: () => Promise.resolve(),
+        stop: vi.fn(),
+      }));
+
+      await monitorTelegramProvider({ token: "tok" });
+      expect(runSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.spyOn(Date, "now").mockRestore();
+    }
+  });
+
+  it("clears running state on error allowing subsequent starts", async () => {
+    runSpy.mockImplementationOnce(() => ({
+      task: () => Promise.reject(new Error("unique-error-123")),
+      stop: vi.fn(),
+    }));
+
+    await expect(monitorTelegramProvider({ token: "tok" })).rejects.toThrow("unique-error-123");
+
+    const originalNow = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => originalNow + 2000);
+
+    try {
+      runSpy.mockImplementationOnce(() => ({
+        task: () => Promise.resolve(),
+        stop: vi.fn(),
+      }));
+
+      await monitorTelegramProvider({ token: "tok" });
+      expect(runSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.spyOn(Date, "now").mockRestore();
+    }
   });
 });

@@ -15,6 +15,65 @@ import { makeProxyFetch } from "./proxy.js";
 import { readTelegramUpdateOffset, writeTelegramUpdateOffset } from "./update-offset-store.js";
 import { startTelegramWebhook } from "./webhook.js";
 
+/**
+ * Instance tracking state for single-instance enforcement.
+ * Prevents duplicate Telegram provider instances during rapid restarts (e.g., SIGUSR1).
+ */
+type InstanceState = {
+  running: boolean;
+  starting: boolean;
+  lastStartAttempt: number;
+};
+
+const instanceStates = new Map<string, InstanceState>();
+
+/** Minimum delay between start attempts to debounce rapid restarts (ms) */
+const START_DEBOUNCE_MS = 1500;
+
+function getInstanceState(accountId: string): InstanceState {
+  let state = instanceStates.get(accountId);
+  if (!state) {
+    state = { running: false, starting: false, lastStartAttempt: 0 };
+    instanceStates.set(accountId, state);
+  }
+  return state;
+}
+
+function setInstanceRunning(accountId: string, running: boolean): void {
+  const state = getInstanceState(accountId);
+  state.running = running;
+  state.starting = false;
+}
+
+function setInstanceStarting(accountId: string, starting: boolean): void {
+  const state = getInstanceState(accountId);
+  state.starting = starting;
+}
+
+function recordStartAttempt(accountId: string): void {
+  const state = getInstanceState(accountId);
+  state.lastStartAttempt = Date.now();
+}
+
+/**
+ * Check if we should skip starting due to debounce or already running.
+ * Returns a reason string if should skip, or null if OK to start.
+ */
+function shouldSkipStart(accountId: string): string | null {
+  const state = getInstanceState(accountId);
+  if (state.running) {
+    return "instance already running";
+  }
+  if (state.starting) {
+    return "instance currently starting";
+  }
+  const elapsed = Date.now() - state.lastStartAttempt;
+  if (elapsed < START_DEBOUNCE_MS) {
+    return `debounced (${elapsed}ms since last attempt, need ${START_DEBOUNCE_MS}ms)`;
+  }
+  return null;
+}
+
 export type MonitorTelegramOpts = {
   token?: string;
   accountId?: string;
@@ -89,15 +148,18 @@ const isGrammyHttpError = (err: unknown): boolean => {
 };
 
 export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
+  // Use mutable ref so handler closure sees updated accountId after resolution
+  let resolvedAccountId = opts.accountId ?? "default";
   const log = opts.runtime?.error ?? console.error;
 
-  // Register handler for Grammy HttpError unhandled rejections.
+  // Register handler for Grammy HttpError unhandled rejections FIRST,
+  // before ANY other operations.
   // This catches network errors that escape the polling loop's try-catch
   // (e.g., from setMyCommands during bot setup).
   // We gate on isGrammyHttpError to avoid suppressing non-Telegram errors.
   const unregisterHandler = registerUnhandledRejectionHandler((err) => {
     if (isGrammyHttpError(err) && isRecoverableTelegramNetworkError(err, { context: "polling" })) {
-      log(`[telegram] Suppressed network error: ${formatErrorMessage(err)}`);
+      log(`[telegram:${resolvedAccountId}] Suppressed network error: ${formatErrorMessage(err)}`);
       return true; // handled - don't crash
     }
     return false;
@@ -109,12 +171,28 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
       cfg,
       accountId: opts.accountId,
     });
+    const accountId = account.accountId;
+    resolvedAccountId = accountId;
+
+    // Single-instance enforcement: check if already running or starting
+    const skipReason = shouldSkipStart(accountId);
+    if (skipReason) {
+      (opts.runtime?.log ?? console.log)(`[telegram:${accountId}] skipping start: ${skipReason}`);
+      return;
+    }
+
+    // Mark as starting to prevent concurrent start attempts
+    setInstanceStarting(accountId, true);
+
     const token = opts.token?.trim() || account.token;
     if (!token) {
       throw new Error(
         `Telegram bot token missing for account "${account.accountId}" (set channels.telegram.accounts.${account.accountId}.botToken/tokenFile or TELEGRAM_BOT_TOKEN for default).`,
       );
     }
+
+    // Record timestamp AFTER validation passes (don't debounce on validation failures)
+    recordStartAttempt(accountId);
 
     const proxyFetch =
       opts.proxyFetch ?? (account.config.proxy ? makeProxyFetch(account.config.proxy) : undefined);
@@ -152,21 +230,31 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
     });
 
     if (opts.useWebhook) {
-      await startTelegramWebhook({
-        token,
-        accountId: account.accountId,
-        config: cfg,
-        path: opts.webhookPath,
-        port: opts.webhookPort,
-        secret: opts.webhookSecret ?? account.config.webhookSecret,
-        host: opts.webhookHost ?? account.config.webhookHost,
-        runtime: opts.runtime as RuntimeEnv,
-        fetch: proxyFetch,
-        abortSignal: opts.abortSignal,
-        publicUrl: opts.webhookUrl,
-      });
+      setInstanceStarting(accountId, false);
+      setInstanceRunning(accountId, true);
+      try {
+        await startTelegramWebhook({
+          token,
+          accountId: account.accountId,
+          config: cfg,
+          path: opts.webhookPath,
+          port: opts.webhookPort,
+          secret: opts.webhookSecret ?? account.config.webhookSecret,
+          host: opts.webhookHost ?? account.config.webhookHost,
+          runtime: opts.runtime as RuntimeEnv,
+          fetch: proxyFetch,
+          abortSignal: opts.abortSignal,
+          publicUrl: opts.webhookUrl,
+        });
+      } finally {
+        setInstanceRunning(accountId, false);
+      }
       return;
     }
+
+    // Transition from starting to running
+    setInstanceStarting(accountId, false);
+    setInstanceRunning(accountId, true);
 
     // Use grammyjs/runner for concurrent update processing
     let restartAttempts = 0;
@@ -182,6 +270,7 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
       try {
         // runner.task() returns a promise that resolves when the runner stops
         await runner.task();
+        restartAttempts = 0;
         return;
       } catch (err) {
         if (opts.abortSignal?.aborted) {
@@ -212,6 +301,15 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
       }
     }
   } finally {
+    setInstanceRunning(resolvedAccountId, false);
     unregisterHandler();
   }
+}
+
+/**
+ * Reset instance state for testing purposes.
+ * @internal
+ */
+export function __resetInstanceStates(): void {
+  instanceStates.clear();
 }
