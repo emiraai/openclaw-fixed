@@ -47,7 +47,7 @@ export const HookMappingSchema = z
     sessionKey: z.string().optional().register(sensitive),
     messageTemplate: z.string().optional(),
     textTemplate: z.string().optional(),
-    deliver: z.boolean().optional(),
+    deliver: z.union([z.boolean(), z.literal("auto")]).optional(),
     allowUnsafeExternalContent: z.boolean().optional(),
     channel: z
       .union([

@@ -19,7 +19,7 @@ export type HookMappingConfig = {
   sessionKey?: string;
   messageTemplate?: string;
   textTemplate?: string;
-  deliver?: boolean;
+  deliver?: boolean | "auto";
   /** DANGEROUS: Disable external content safety wrapping for this hook. */
   allowUnsafeExternalContent?: boolean;
   channel?:

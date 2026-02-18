@@ -14,7 +14,7 @@ export type HookMappingResolved = {
   sessionKey?: string;
   messageTemplate?: string;
   textTemplate?: string;
-  deliver?: boolean;
+  deliver?: boolean | "auto";
   allowUnsafeExternalContent?: boolean;
   channel?: HookMessageChannel;
   to?: string;
@@ -49,7 +49,7 @@ export type HookAction =
       agentId?: string;
       wakeMode: "now" | "next-heartbeat";
       sessionKey?: string;
-      deliver?: boolean;
+      deliver?: boolean | "auto";
       allowUnsafeExternalContent?: boolean;
       channel?: HookMessageChannel;
       to?: string;
@@ -89,7 +89,7 @@ type HookTransformResult = Partial<{
   wakeMode: "now" | "next-heartbeat";
   name: string;
   sessionKey: string;
-  deliver: boolean;
+  deliver: boolean | "auto";
   allowUnsafeExternalContent: boolean;
   channel: HookMessageChannel;
   to: string;
@@ -298,7 +298,7 @@ function mergeAction(
     name: override.name ?? baseAgent?.name,
     agentId: override.agentId ?? baseAgent?.agentId,
     sessionKey: override.sessionKey ?? baseAgent?.sessionKey,
-    deliver: typeof override.deliver === "boolean" ? override.deliver : baseAgent?.deliver,
+    deliver: override.deliver === "auto" ? "auto" : typeof override.deliver === "boolean" ? override.deliver : baseAgent?.deliver,
     allowUnsafeExternalContent:
       typeof override.allowUnsafeExternalContent === "boolean"
         ? override.allowUnsafeExternalContent

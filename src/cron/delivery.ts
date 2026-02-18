@@ -65,7 +65,7 @@ export function resolveCronDeliveryPlan(job: CronJob): CronDeliveryPlan {
   }
 
   const legacyMode =
-    payload?.deliver === true ? "explicit" : payload?.deliver === false ? "off" : "auto";
+    payload?.deliver === true ? "explicit" : payload?.deliver === false ? "off" : payload?.deliver === "auto" ? "explicit" : "auto";
   const hasExplicitTarget = Boolean(to);
   const requested = legacyMode === "explicit" || (legacyMode === "auto" && hasExplicitTarget);
 

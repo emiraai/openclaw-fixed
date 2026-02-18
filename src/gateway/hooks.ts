@@ -225,7 +225,7 @@ export type HookAgentPayload = {
   agentId?: string;
   wakeMode: "now" | "next-heartbeat";
   sessionKey?: string;
-  deliver: boolean;
+  deliver: boolean | "auto";
   channel: HookMessageChannel;
   to?: string;
   model?: string;
@@ -254,7 +254,8 @@ export function resolveHookChannel(raw: unknown): HookMessageChannel | null {
   return normalized as HookMessageChannel;
 }
 
-export function resolveHookDeliver(raw: unknown): boolean {
+export function resolveHookDeliver(raw: unknown): boolean | "auto" {
+  if (raw === "auto") return "auto";
   return raw !== false;
 }
 
