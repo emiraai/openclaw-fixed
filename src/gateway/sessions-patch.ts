@@ -67,7 +67,7 @@ export async function applySessionsPatchToStore(params: {
   store: Record<string, SessionEntry>;
   storeKey: string;
   patch: SessionsPatchParams;
-  loadGatewayModelCatalog?: () => Promise<ModelCatalogEntry[]>;
+  loadGatewayModelCatalog?: (agentId?: string) => Promise<ModelCatalogEntry[]>;
 }): Promise<{ ok: true; entry: SessionEntry } | { ok: false; error: ErrorShape }> {
   const { cfg, store, storeKey, patch } = params;
   const now = Date.now();
@@ -299,7 +299,7 @@ export async function applySessionsPatchToStore(params: {
           error: errorShape(ErrorCodes.UNAVAILABLE, "model catalog unavailable"),
         };
       }
-      const catalog = await params.loadGatewayModelCatalog();
+      const catalog = await params.loadGatewayModelCatalog(sessionAgentId);
       const resolved = resolveAllowedModelRef({
         cfg,
         catalog,
