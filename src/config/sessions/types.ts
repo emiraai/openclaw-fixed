@@ -81,6 +81,8 @@ export type SessionEntry = {
   modelProvider?: string;
   model?: string;
   contextTokens?: number;
+  lastRoutedModel?: string;
+  lastRoutedAt?: number;
   compactionCount?: number;
   memoryFlushAt?: number;
   memoryFlushCompactionCount?: number;
