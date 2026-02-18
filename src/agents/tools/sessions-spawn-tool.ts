@@ -187,7 +187,8 @@ export function createSessionsSpawnTool(opts?: {
           ? Math.max(0, Math.floor(attachmentsCfg.maxFiles))
           : 50;
       const maxFileBytes =
-        typeof attachmentsCfg?.maxFileBytes === "number" && Number.isFinite(attachmentsCfg.maxFileBytes)
+        typeof attachmentsCfg?.maxFileBytes === "number" &&
+        Number.isFinite(attachmentsCfg.maxFileBytes)
           ? Math.max(0, Math.floor(attachmentsCfg.maxFileBytes))
           : 1 * 1024 * 1024;
       const retainOnSessionKeep = attachmentsCfg?.retainOnSessionKeep === true;
