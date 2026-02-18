@@ -1,0 +1,39 @@
+{
+  "id": "posthog",
+  "name": "PostHog LLM Analytics",
+  "description": "Send LLM traces, generations, and tool spans to PostHog",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": { "type": "string", "description": "PostHog project API key" },
+      "host": {
+        "type": "string",
+        "default": "https://us.i.posthog.com",
+        "description": "PostHog instance URL"
+      },
+      "privacyMode": {
+        "type": "boolean",
+        "default": true,
+        "description": "When enabled, LLM input/output content is not sent to PostHog"
+      },
+      "enabled": { "type": "boolean", "default": true }
+    },
+    "required": ["apiKey"]
+  },
+  "uiHints": {
+    "apiKey": {
+      "label": "PostHog API Key",
+      "sensitive": true,
+      "placeholder": "phc_..."
+    },
+    "host": {
+      "label": "PostHog Host",
+      "help": "Your PostHog instance URL"
+    },
+    "privacyMode": {
+      "label": "Privacy Mode",
+      "help": "When enabled, LLM input/output content is not sent to PostHog"
+    }
+  }
+}

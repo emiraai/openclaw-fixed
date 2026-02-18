@@ -1,0 +1,303 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const captureMock = vi.hoisted(() => vi.fn());
+const shutdownMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const onDiagnosticEventMock = vi.hoisted(() => vi.fn());
+
+vi.mock("posthog-node", () => ({
+  PostHog: class {
+    capture = captureMock;
+    shutdown = shutdownMock;
+  },
+}));
+
+vi.mock("openclaw/plugin-sdk", async () => {
+  const actual = await vi.importActual<typeof import("openclaw/plugin-sdk")>("openclaw/plugin-sdk");
+  return {
+    ...actual,
+    onDiagnosticEvent: onDiagnosticEventMock,
+  };
+});
+
+vi.mock("node:crypto", () => ({
+  randomUUID: vi.fn(() => `uuid-${Math.random().toString(36).slice(2, 8)}`),
+}));
+
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { PostHogPluginConfig } from "./types.js";
+import { registerPostHogHooks } from "./plugin.js";
+
+type HookHandler = (event: unknown, ctx: unknown) => void | Promise<void>;
+type ServiceDef = { id: string; start: () => Promise<void>; stop?: () => Promise<void> };
+
+function createMockApi() {
+  const hooks = new Map<string, HookHandler[]>();
+  const services: ServiceDef[] = [];
+
+  const api = {
+    pluginConfig: {},
+    logger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+    registerService: vi.fn((svc: ServiceDef) => {
+      services.push(svc);
+    }),
+    on: vi.fn((hookName: string, handler: HookHandler) => {
+      if (!hooks.has(hookName)) hooks.set(hookName, []);
+      hooks.get(hookName)!.push(handler);
+    }),
+  } as unknown as OpenClawPluginApi;
+
+  return { api, hooks, services };
+}
+
+function defaultConfig(overrides: Partial<PostHogPluginConfig> = {}): PostHogPluginConfig {
+  return {
+    apiKey: "phc_test",
+    host: "https://us.i.posthog.com",
+    privacyMode: false,
+    enabled: true,
+    ...overrides,
+  };
+}
+
+describe("registerPostHogHooks", () => {
+  beforeEach(() => {
+    captureMock.mockClear();
+    shutdownMock.mockClear();
+    onDiagnosticEventMock.mockReset();
+    onDiagnosticEventMock.mockReturnValue(vi.fn()); // unsubscribe fn
+  });
+
+  test("registers a service and all expected hooks", () => {
+    const { api, hooks, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+
+    expect(services).toHaveLength(1);
+    expect(services[0]!.id).toBe("posthog");
+
+    const registeredHooks = [...hooks.keys()];
+    expect(registeredHooks).toContain("message_received");
+    expect(registeredHooks).toContain("llm_input");
+    expect(registeredHooks).toContain("llm_output");
+    expect(registeredHooks).toContain("after_tool_call");
+  });
+
+  test("service start initializes PostHog client", async () => {
+    const { api, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+
+    await services[0]!.start();
+
+    expect(onDiagnosticEventMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("service stop shuts down PostHog client", async () => {
+    const { api, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+
+    await services[0]!.start();
+    await services[0]!.stop?.();
+
+    expect(shutdownMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("llm_input + llm_output captures $ai_generation", async () => {
+    const { api, hooks, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+    await services[0]!.start();
+
+    // Fire llm_input
+    const llmInputHandlers = hooks.get("llm_input")!;
+    await llmInputHandlers[0]!(
+      {
+        runId: "run-1",
+        sessionId: "sess-1",
+        provider: "openai",
+        model: "gpt-4o",
+        prompt: "What is 2+2?",
+        historyMessages: [],
+        imagesCount: 0,
+      },
+      { sessionKey: "telegram:123", agentId: "agent-1", messageProvider: "telegram" },
+    );
+
+    // Fire llm_output
+    const llmOutputHandlers = hooks.get("llm_output")!;
+    await llmOutputHandlers[0]!(
+      {
+        runId: "run-1",
+        sessionId: "sess-1",
+        provider: "openai",
+        model: "gpt-4o",
+        assistantTexts: ["4"],
+        usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, total: 15 },
+      },
+      { sessionKey: "telegram:123", agentId: "agent-1" },
+    );
+
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    const captured = captureMock.mock.calls[0]![0];
+    expect(captured.event).toBe("$ai_generation");
+    expect(captured.distinctId).toBe("telegram:123");
+    expect(captured.properties.$ai_model).toBe("gpt-4o");
+    expect(captured.properties.$ai_input_tokens).toBe(10);
+    expect(captured.properties.$ai_output_tokens).toBe(5);
+    expect(captured.properties.$ai_input).toEqual(["What is 2+2?"]);
+    expect(captured.properties.$ai_output_choices).toEqual(["4"]);
+  });
+
+  test("privacy mode redacts input/output content", async () => {
+    const { api, hooks, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig({ privacyMode: true }));
+    await services[0]!.start();
+
+    const llmInputHandlers = hooks.get("llm_input")!;
+    await llmInputHandlers[0]!(
+      {
+        runId: "run-2",
+        sessionId: "sess-2",
+        provider: "anthropic",
+        model: "claude-3",
+        prompt: "secret data",
+        historyMessages: [{ role: "user", content: "private" }],
+        imagesCount: 0,
+      },
+      { sessionKey: "slack:456" },
+    );
+
+    const llmOutputHandlers = hooks.get("llm_output")!;
+    await llmOutputHandlers[0]!(
+      {
+        runId: "run-2",
+        sessionId: "sess-2",
+        provider: "anthropic",
+        model: "claude-3",
+        assistantTexts: ["secret response"],
+        usage: { input: 20, output: 10 },
+      },
+      { sessionKey: "slack:456" },
+    );
+
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    const captured = captureMock.mock.calls[0]![0];
+    expect(captured.properties.$ai_input).toBeNull();
+    expect(captured.properties.$ai_output_choices).toBeNull();
+    expect(captured.properties.$ai_input_tokens).toBe(20);
+  });
+
+  test("after_tool_call captures $ai_span", async () => {
+    const { api, hooks, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+    await services[0]!.start();
+
+    // Set up a trace by triggering llm_input first
+    const llmInputHandlers = hooks.get("llm_input")!;
+    await llmInputHandlers[0]!(
+      {
+        runId: "run-3",
+        sessionId: "sess-3",
+        provider: "openai",
+        model: "gpt-4o",
+        prompt: "search for weather",
+        historyMessages: [],
+        imagesCount: 0,
+      },
+      { sessionKey: "telegram:789", agentId: "agent-1", messageProvider: "telegram" },
+    );
+
+    // Complete the generation to set up parent span
+    const llmOutputHandlers = hooks.get("llm_output")!;
+    await llmOutputHandlers[0]!(
+      {
+        runId: "run-3",
+        sessionId: "sess-3",
+        provider: "openai",
+        model: "gpt-4o",
+        assistantTexts: ["Let me search..."],
+        usage: { input: 10, output: 5 },
+      },
+      { sessionKey: "telegram:789" },
+    );
+
+    captureMock.mockClear();
+
+    // Fire after_tool_call
+    const toolCallHandlers = hooks.get("after_tool_call")!;
+    await toolCallHandlers[0]!(
+      {
+        toolName: "web_search",
+        params: { query: "weather" },
+        result: { answer: "sunny" },
+        durationMs: 250,
+      },
+      { sessionKey: "telegram:789", toolName: "web_search", agentId: "agent-1" },
+    );
+
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    const captured = captureMock.mock.calls[0]![0];
+    expect(captured.event).toBe("$ai_span");
+    expect(captured.properties.$ai_span_name).toBe("web_search");
+    expect(captured.properties.$ai_latency).toBeCloseTo(0.25, 2);
+    expect(captured.properties.$ai_parent_id).toBeTruthy();
+  });
+
+  test("diagnostic message.processed captures $ai_trace", async () => {
+    const { api, hooks, services } = createMockApi();
+    let diagnosticListener: (evt: unknown) => void = () => {};
+    onDiagnosticEventMock.mockImplementation((fn: (evt: unknown) => void) => {
+      diagnosticListener = fn;
+      return vi.fn();
+    });
+
+    registerPostHogHooks(api, defaultConfig());
+    await services[0]!.start();
+
+    // Set up trace by triggering message_received
+    const messageHandlers = hooks.get("message_received")!;
+    await messageHandlers[0]!(
+      { from: "user1", content: "hello", timestamp: Date.now() },
+      { channelId: "telegram" },
+    );
+
+    // Trigger diagnostic event
+    diagnosticListener({
+      type: "message.processed",
+      ts: Date.now(),
+      seq: 1,
+      channel: "telegram",
+      outcome: "completed",
+      durationMs: 3000,
+      sessionKey: "telegram",
+    });
+
+    expect(captureMock).toHaveBeenCalledTimes(1);
+    const captured = captureMock.mock.calls[0]![0];
+    expect(captured.event).toBe("$ai_trace");
+    expect(captured.properties.$ai_latency).toBeCloseTo(3.0, 2);
+    expect(captured.properties.$ai_is_error).toBe(false);
+  });
+
+  test("llm_output without matching llm_input is ignored", async () => {
+    const { api, hooks, services } = createMockApi();
+    registerPostHogHooks(api, defaultConfig());
+    await services[0]!.start();
+
+    const llmOutputHandlers = hooks.get("llm_output")!;
+    await llmOutputHandlers[0]!(
+      {
+        runId: "no-matching-input",
+        sessionId: "sess-x",
+        provider: "openai",
+        model: "gpt-4o",
+        assistantTexts: ["orphan response"],
+      },
+      { sessionKey: "telegram:999" },
+    );
+
+    expect(captureMock).not.toHaveBeenCalled();
+  });
+});
