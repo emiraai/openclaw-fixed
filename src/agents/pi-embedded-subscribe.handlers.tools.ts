@@ -10,6 +10,7 @@ import type {
 } from "./pi-embedded-subscribe.handlers.types.js";
 import {
   extractToolErrorMessage,
+  extractToolResultAudioAsVoice,
   extractToolResultMediaPaths,
   extractToolResultText,
   extractMessagingToolSend,
@@ -377,14 +378,23 @@ export async function handleToolExecutionEnd(
     }
   }
 
-  // Deliver media from tool results when the verbose emitToolOutput path is off.
-  // When shouldEmitToolOutput() is true, emitToolOutput already delivers media
-  // via parseReplyDirectives (MEDIA: text extraction), so skip to avoid duplicates.
-  if (ctx.params.onToolResult && !isToolError && !ctx.shouldEmitToolOutput()) {
-    const mediaPaths = extractToolResultMediaPaths(result);
+  // Deliver media from tool results.
+  // When shouldEmitToolOutput() is true, text-based MEDIA: tokens are already
+  // delivered via emitToolOutput → parseReplyDirectives, so only extract
+  // structured media from result details (e.g. details.mediaUrl from TTS) to
+  // avoid duplicates. When shouldEmitToolOutput() is false, extract from all
+  // sources (details + text tokens).
+  if (ctx.params.onToolResult && !isToolError) {
+    const mediaPaths = extractToolResultMediaPaths(result, {
+      detailsOnly: ctx.shouldEmitToolOutput(),
+    });
     if (mediaPaths.length > 0) {
+      const audioAsVoice = extractToolResultAudioAsVoice(result);
       try {
-        void ctx.params.onToolResult({ mediaUrls: mediaPaths });
+        void ctx.params.onToolResult({
+          mediaUrls: mediaPaths,
+          ...(audioAsVoice ? { audioAsVoice } : undefined),
+        });
       } catch {
         // ignore delivery failures
       }
