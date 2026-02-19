@@ -335,6 +335,8 @@ export function resolveCommandArgMenu(params: {
   command: ChatCommandDefinition;
   args?: CommandArgs;
   cfg?: OpenClawConfig;
+  provider?: string;
+  model?: string;
 }): { arg: CommandArgDefinition; choices: ResolvedCommandArgChoice[]; title?: string } | null {
   const { command, args, cfg } = params;
   if (!command.args || !command.argsMenu) {
@@ -346,7 +348,16 @@ export function resolveCommandArgMenu(params: {
   const argSpec = command.argsMenu;
   const argName =
     argSpec === "auto"
-      ? command.args.find((arg) => resolveCommandArgChoices({ command, arg, cfg }).length > 0)?.name
+      ? command.args.find(
+          (arg) =>
+            resolveCommandArgChoices({
+              command,
+              arg,
+              cfg,
+              provider: params.provider,
+              model: params.model,
+            }).length > 0,
+        )?.name
       : argSpec.arg;
   if (!argName) {
     return null;
@@ -361,7 +372,13 @@ export function resolveCommandArgMenu(params: {
   if (!arg) {
     return null;
   }
-  const choices = resolveCommandArgChoices({ command, arg, cfg });
+  const choices = resolveCommandArgChoices({
+    command,
+    arg,
+    cfg,
+    provider: params.provider,
+    model: params.model,
+  });
   if (choices.length === 0) {
     return null;
   }

@@ -10,7 +10,9 @@ import {
   type ComponentData,
 } from "@buape/carbon";
 import { ApplicationCommandOptionType, ButtonStyle } from "discord-api-types/v10";
+import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../../agents/defaults.js";
 import { resolveHumanDelayConfig } from "../../agents/identity.js";
+import { resolveConfiguredModelRef } from "../../agents/model-selection.js";
 import { resolveChunkMode, resolveTextChunkLimit } from "../../auto-reply/chunk.js";
 import type {
   ChatCommandDefinition,
@@ -34,6 +36,7 @@ import type { ReplyPayload } from "../../auto-reply/types.js";
 import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import type { OpenClawConfig, loadConfig } from "../../config/config.js";
+import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { buildPairingReply } from "../../pairing/pairing-messages.js";
 import {
@@ -60,6 +63,32 @@ import { resolveDiscordSenderIdentity } from "./sender-identity.js";
 import { resolveDiscordThreadParentInfo } from "./threading.js";
 
 type DiscordConfig = NonNullable<OpenClawConfig["channels"]>["discord"];
+
+function resolveMenuModelContext(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  sessionKey: string;
+}): { provider: string; model: string } {
+  const resolved = resolveConfiguredModelRef({
+    cfg: params.cfg,
+    defaultProvider: DEFAULT_PROVIDER,
+    defaultModel: DEFAULT_MODEL,
+  });
+  let provider = resolved.provider ?? DEFAULT_PROVIDER;
+  let model = resolved.model ?? DEFAULT_MODEL;
+  try {
+    const storePath = resolveStorePath(params.cfg.session?.store, { agentId: params.agentId });
+    const store = loadSessionStore(storePath);
+    const entry = store[params.sessionKey];
+    if (entry) {
+      provider = entry.providerOverride?.trim() || entry.modelProvider?.trim() || provider;
+      model = entry.modelOverride?.trim() || entry.model?.trim() || model;
+    }
+  } catch {
+    // Ignore session store read errors and fall back to defaults.
+  }
+  return { provider, model };
+}
 
 function buildDiscordCommandOptions(params: {
   command: ChatCommandDefinition;
@@ -684,10 +713,38 @@ async function dispatchDiscordCommandInteraction(params: {
     return;
   }
 
+  const isGuild = Boolean(interaction.guild);
+  const channelId = rawChannelId || "unknown";
+  const interactionId = interaction.rawData.id;
+  const route = resolveAgentRoute({
+    cfg,
+    channel: "discord",
+    accountId,
+    guildId: interaction.guild?.id ?? undefined,
+    memberRoleIds,
+    peer: {
+      kind: isDirectMessage ? "direct" : isGroupDm ? "group" : "channel",
+      id: isDirectMessage ? user.id : channelId,
+    },
+    parentPeer: threadParentId ? { kind: "channel", id: threadParentId } : undefined,
+  });
+  const conversationLabel = isDirectMessage ? (user.globalName ?? user.username) : channelId;
+  const ownerAllowFrom = resolveDiscordOwnerAllowFrom({
+    channelConfig,
+    guildInfo,
+    sender: { id: sender.id, name: sender.name, tag: sender.tag },
+  });
+  const menuModelContext = resolveMenuModelContext({
+    cfg,
+    agentId: route.agentId,
+    sessionKey: route.sessionKey,
+  });
   const menu = resolveCommandArgMenu({
     command,
     args: commandArgs,
     cfg,
+    provider: menuModelContext.provider,
+    model: menuModelContext.model,
   });
   if (menu) {
     const menuPayload = buildDiscordCommandArgMenu({
@@ -719,27 +776,6 @@ async function dispatchDiscordCommandInteraction(params: {
     return;
   }
 
-  const isGuild = Boolean(interaction.guild);
-  const channelId = rawChannelId || "unknown";
-  const interactionId = interaction.rawData.id;
-  const route = resolveAgentRoute({
-    cfg,
-    channel: "discord",
-    accountId,
-    guildId: interaction.guild?.id ?? undefined,
-    memberRoleIds,
-    peer: {
-      kind: isDirectMessage ? "direct" : isGroupDm ? "group" : "channel",
-      id: isDirectMessage ? user.id : channelId,
-    },
-    parentPeer: threadParentId ? { kind: "channel", id: threadParentId } : undefined,
-  });
-  const conversationLabel = isDirectMessage ? (user.globalName ?? user.username) : channelId;
-  const ownerAllowFrom = resolveDiscordOwnerAllowFrom({
-    channelConfig,
-    guildInfo,
-    sender: { id: sender.id, name: sender.name, tag: sender.tag },
-  });
   const ctxPayload = finalizeInboundContext({
     Body: prompt,
     BodyForAgent: prompt,
