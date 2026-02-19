@@ -8,6 +8,7 @@ import {
   resolveModelRefFromString,
   type ModelRef,
 } from "../agents/model-selection.js";
+import { ensureOllamaApiRegistered } from "../agents/ollama-stream.js";
 import { resolveModel } from "../agents/pi-embedded-runner/model.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type {
@@ -435,6 +436,10 @@ export async function summarizeText(params: {
   if (!resolved.model) {
     throw new Error(resolved.error ?? `Unknown summary model: ${ref.provider}/${ref.model}`);
   }
+  if (resolved.model.api === "ollama") {
+    ensureOllamaApiRegistered();
+  }
+
   const apiKey = requireApiKey(
     await getApiKeyForModel({ model: resolved.model, cfg }),
     ref.provider,
