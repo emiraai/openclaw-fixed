@@ -10,6 +10,7 @@ import {
   markAuthProfileGood,
   markAuthProfileUsed,
 } from "../auth-profiles.js";
+import { resolveCompactionInstructions } from "../compaction-instructions.js";
 import {
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
@@ -661,6 +662,7 @@ export async function runEmbeddedPiAgent(
                 bashElevated: params.bashElevated,
                 extraSystemPrompt: params.extraSystemPrompt,
                 ownerNumbers: params.ownerNumbers,
+                customInstructions: resolveCompactionInstructions(params.config),
                 trigger: "overflow",
                 diagId: overflowDiagId,
                 attempt: overflowCompactionAttempts,

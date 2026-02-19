@@ -295,6 +295,8 @@ export type AgentCompactionConfig = {
   maxHistoryShare?: number;
   /** Pre-compaction memory flush (agentic turn). Default: enabled. */
   memoryFlush?: AgentCompactionMemoryFlushConfig;
+  /** Custom instructions for compaction summarization (overrides default identifier preservation list). */
+  customInstructions?: string;
 };
 
 export type AgentCompactionMemoryFlushConfig = {
