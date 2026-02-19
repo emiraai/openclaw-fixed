@@ -313,10 +313,10 @@ export const registerTelegramNativeCommands = ({
       })
     : [];
   const reservedCommands = new Set(
-    listNativeCommandSpecs().map((command) => command.name.toLowerCase()),
+    listNativeCommandSpecs().map((command) => normalizeTelegramCommandName(command.name)),
   );
   for (const command of skillCommands) {
-    reservedCommands.add(command.name.toLowerCase());
+    reservedCommands.add(normalizeTelegramCommandName(command.name));
   }
   const customResolution = resolveTelegramCustomCommands({
     commands: telegramCfg.customCommands,
@@ -422,7 +422,7 @@ export const registerTelegramNativeCommands = ({
       logVerbose("telegram: bot.command unavailable; skipping native handlers");
     } else {
       for (const command of nativeCommands) {
-        bot.command(command.name, async (ctx: TelegramNativeCommandContext) => {
+        bot.command(normalizeTelegramCommandName(command.name), async (ctx: TelegramNativeCommandContext) => {
           const msg = ctx.message;
           if (!msg) {
             return;
