@@ -32,7 +32,11 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { resolveOpenClawDocsPath } from "../docs-path.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
-import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../ollama-stream.js";
+import {
+  createOllamaStreamFn,
+  ensureOllamaApiRegistered,
+  OLLAMA_NATIVE_BASE_URL,
+} from "../ollama-stream.js";
 import {
   ensureSessionHeader,
   validateAnthropicTurns,
@@ -565,10 +569,11 @@ export async function compactEmbeddedPiSessionDirect(
       });
       applySystemPromptOverrideToSession(session, systemPromptOverride());
 
-      // Ollama native API: override SDK streamFn so compaction uses the
-      // direct /api/chat endpoint instead of the unregistered "ollama" API
-      // type in the ModelRegistry (#20652, #11828).
+      // Ollama native API: register "ollama" in the SDK's API provider
+      // registry so that completeSimple() (used by session.compact()) can
+      // reach the native /api/chat endpoint (#20652, #11828).
       if (model.api === "ollama") {
+        ensureOllamaApiRegistered();
         const providerConfig = params.config?.models?.providers?.[model.provider];
         const modelBaseUrl = typeof model.baseUrl === "string" ? model.baseUrl.trim() : "";
         const providerBaseUrl =
