@@ -48,10 +48,15 @@ type SubagentAnnounceDeliveryResult = {
 function buildCompletionDeliveryMessage(params: {
   findings: string;
   subagentName: string;
+  model?: string;
 }): string {
   const findingsText = params.findings.trim();
   const hasFindings = findingsText.length > 0 && findingsText !== "(no output)";
-  const header = `✅ Subagent ${params.subagentName} finished`;
+  const modelShort = params.model ? params.model.split("/").pop() : undefined;
+  const displayName = params.subagentName;
+  const header = modelShort
+    ? `✅ Subagent ${displayName} (${modelShort}) finished`
+    : `✅ Subagent ${displayName} finished`;
   if (!hasFindings) {
     return header;
   }
@@ -721,6 +726,7 @@ export async function runSubagentAnnounceFlow(params: {
   startedAt?: number;
   endedAt?: number;
   label?: string;
+  model?: string;
   outcome?: SubagentRunOutcome;
   announceType?: SubagentAnnounceType;
   expectsCompletionMessage?: boolean;
@@ -843,7 +849,7 @@ export async function runSubagentAnnounceFlow(params: {
     // Build instructional message for main agent
     const announceType = params.announceType ?? "subagent task";
     const taskLabel = params.label || params.task || "task";
-    const subagentName = resolveAgentIdFromSessionKey(params.childSessionKey);
+    const subagentName = params.label || resolveAgentIdFromSessionKey(params.childSessionKey);
     const announceSessionId = childSessionId || "unknown";
     const findings = reply || "(no output)";
     let completionMessage = "";
@@ -913,6 +919,7 @@ export async function runSubagentAnnounceFlow(params: {
     completionMessage = buildCompletionDeliveryMessage({
       findings,
       subagentName,
+      model: params.model,
     });
     const internalSummaryMessage = [
       `[System Message] [sessionId: ${announceSessionId}] A ${announceType} "${taskLabel}" just ${statusLabel}.`,

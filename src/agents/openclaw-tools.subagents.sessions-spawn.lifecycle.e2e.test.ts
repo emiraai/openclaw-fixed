@@ -235,7 +235,7 @@ describe("openclaw-tools: subagents (sessions_spawn lifecycle)", () => {
       sessionKey: "agent:main:main",
       channel: "whatsapp",
       to: "+123",
-      message: "✅ Subagent main finished\n\ndone",
+      message: "✅ Subagent my-task finished\n\ndone",
     });
     expect(child.sessionKey?.startsWith("agent:main:subagent:")).toBe(true);
   });
