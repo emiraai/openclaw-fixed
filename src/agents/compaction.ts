@@ -3,7 +3,9 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { estimateTokens, generateSummary } from "@mariozechner/pi-coding-agent";
 import { retryAsync } from "../infra/retry.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
+import { stripThoughtSignatures } from "./pi-embedded-helpers/bootstrap.js";
 import { repairToolUseResultPairing, stripToolResultDetails } from "./session-transcript-repair.js";
+import { resolveTranscriptPolicy } from "./transcript-policy.js";
 
 export const BASE_CHUNK_RATIO = 0.4;
 export const MIN_CHUNK_RATIO = 0.15;
@@ -14,9 +16,30 @@ const MERGE_SUMMARIES_INSTRUCTIONS =
   "Merge these partial summaries into a single cohesive summary. Preserve decisions," +
   " TODOs, open questions, and any constraints.";
 
-export function estimateMessagesTokens(messages: AgentMessage[]): number {
+export function estimateMessagesTokens(
+  messages: AgentMessage[],
+  modelContext?: { modelApi?: string; provider?: string; modelId?: string },
+): number {
   // SECURITY: toolResult.details can contain untrusted/verbose payloads; never include in LLM-facing compaction.
-  const safe = stripToolResultDetails(messages);
+  let safe = stripToolResultDetails(messages);
+
+  // SECURITY: Strip Gemini thought signatures to ensure accurate token counting and prevent 400 errors.
+  // This must happen BEFORE token estimation so the system's decision logic operates on clean data.
+  if (modelContext) {
+    const policy = resolveTranscriptPolicy(modelContext);
+    if (policy.sanitizeThoughtSignatures) {
+      safe = safe.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: stripThoughtSignatures(msg.content, policy.sanitizeThoughtSignatures),
+          };
+        }
+        return msg;
+      });
+    }
+  }
+
   return safe.reduce((sum, message) => sum + estimateTokens(message), 0);
 }
 
@@ -155,8 +178,35 @@ async function summarizeChunks(params: {
   }
 
   // SECURITY: never feed toolResult.details into summarization prompts.
-  const safeMessages = stripToolResultDetails(params.messages);
-  const chunks = chunkMessagesByMaxTokens(safeMessages, params.maxChunkTokens);
+  const baseSafeMessages = stripToolResultDetails(params.messages);
+
+  // 1. Resolve policy for the summarization model
+  const policy = resolveTranscriptPolicy({
+    modelApi: params.model.api,
+    provider: params.model.provider,
+    modelId: params.model.id,
+  });
+
+  // 2. Apply transcript hygiene (strip signatures and repair pairings)
+  let cleanMessages = baseSafeMessages;
+
+  if (policy.repairToolUseResultPairing) {
+    cleanMessages = repairToolUseResultPairing(cleanMessages).messages;
+  }
+
+  if (policy.sanitizeThoughtSignatures) {
+    cleanMessages = cleanMessages.map((msg) => {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        return {
+          ...msg,
+          content: stripThoughtSignatures(msg.content, policy.sanitizeThoughtSignatures),
+        };
+      }
+      return msg;
+    });
+  }
+
+  const chunks = chunkMessagesByMaxTokens(cleanMessages, params.maxChunkTokens);
   let summary = params.previousSummary;
 
   for (const chunk of chunks) {
@@ -277,7 +327,11 @@ export async function summarizeInStages(params: {
 
   const minMessagesForSplit = Math.max(2, params.minMessagesForSplit ?? 4);
   const parts = normalizeParts(params.parts ?? DEFAULT_PARTS, messages.length);
-  const totalTokens = estimateMessagesTokens(messages);
+  const totalTokens = estimateMessagesTokens(messages, {
+    modelApi: params.model.api,
+    provider: params.model.provider,
+    modelId: params.model.id,
+  });
 
   if (parts <= 1 || messages.length < minMessagesForSplit || totalTokens <= params.maxChunkTokens) {
     return summarizeWithFallback(params);
