@@ -165,7 +165,6 @@ export function createSessionsSpawnTool(opts?: {
         typeof timeoutSecondsCandidate === "number" && Number.isFinite(timeoutSecondsCandidate)
           ? Math.max(0, Math.floor(timeoutSecondsCandidate))
           : 0;
-      let modelWarning: string | undefined;
       let modelApplied = false;
 
       const cfg = loadConfig();
@@ -311,16 +310,11 @@ export function createSessionsSpawnTool(opts?: {
         } catch (err) {
           const messageText =
             err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-          const recoverable =
-            messageText.includes("invalid model") || messageText.includes("model not allowed");
-          if (!recoverable) {
-            return jsonResult({
-              status: "error",
-              error: messageText,
-              childSessionKey,
-            });
-          }
-          modelWarning = messageText;
+          return jsonResult({
+            status: "error",
+            error: messageText,
+            childSessionKey,
+          });
         }
       }
       if (thinkingOverride !== undefined) {
@@ -556,7 +550,6 @@ export function createSessionsSpawnTool(opts?: {
         childSessionKey,
         runId: childRunId,
         modelApplied: resolvedModel ? modelApplied : undefined,
-        warning: modelWarning,
         attachments: attachmentsReceipt,
       });
     },
