@@ -448,11 +448,23 @@ public final class OpenClawChatViewModel {
         // Never drop events for our own pending run on key mismatch, or the UI can stay
         // stuck at "thinking" until the user reopens and forces a history reload.
         if let sessionKey = chat.sessionKey,
-           !Self.matchesCurrentSessionKey(incoming: sessionKey, current: self.sessionKey),
-           !isOurRun
-        {
-            return
-        }
+   !Self.matchesCurrentSessionKey(incoming: sessionKey, current: self.sessionKey),
+   !isOurRun
+{
+    // Even on session key mismatch, clear streaming state for terminal events.
+    // This handles cross-channel scenarios (e.g. iMessage completing a run while
+    // webchat is open) where the gateway emits a different canonical session key
+    // than the alias this view is using. Without this, streamingAssistantText is
+    // set by agent events but never cleared, leaving the typing indicator stuck.
+    switch chat.state {
+    case "final", "aborted", "error":
+        self.streamingAssistantText = nil
+        self.pendingToolCallsById = [:]
+    default:
+        break
+    }
+    return
+}
         if !isOurRun {
             // Keep multiple clients in sync: if another client finishes a run for our session, refresh history.
             switch chat.state {

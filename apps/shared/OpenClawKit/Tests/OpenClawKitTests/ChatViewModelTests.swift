@@ -416,6 +416,48 @@ extension TestChatTransportState {
         #expect(await MainActor.run { vm.pendingToolCalls.isEmpty })
     }
 
+    @Test func clearsStreamingOnMismatchedSessionKeyTerminalEvent() async throws {
+        let sessionId = "sess-main"
+        let history = OpenClawChatHistoryPayload(
+            sessionKey: "main",
+            sessionId: sessionId,
+            messages: [],
+            thinkingLevel: "off")
+        let transport = TestChatTransport(historyResponses: [history, history])
+        let vm = await MainActor.run { OpenClawChatViewModel(sessionKey: "main", transport: transport) }
+
+        await MainActor.run { vm.load() }
+        try await waitUntil("bootstrap") { await MainActor.run { vm.healthOK && vm.sessionId == sessionId } }
+
+        transport.emit(
+            .agent(
+                OpenClawAgentEventPayload(
+                    runId: sessionId,
+                    seq: 1,
+                    stream: "assistant",
+                    ts: Int(Date().timeIntervalSince1970 * 1000),
+                    data: ["text": AnyCodable("imessage stream")])))
+
+        try await waitUntil("streaming active") {
+            await MainActor.run { vm.streamingAssistantText == "imessage stream" }
+        }
+
+        transport.emit(
+            .chat(
+                OpenClawChatEventPayload(
+                    runId: "imessage-run",
+                    sessionKey: "imessage:main",
+                    state: "final",
+                    message: nil,
+                    errorMessage: nil)))
+
+        try await waitUntil("streaming cleared on key mismatch") {
+            await MainActor.run { vm.streamingAssistantText == nil }
+        }
+        #expect(await MainActor.run { vm.pendingToolCalls.isEmpty })
+    }
+
+
     @Test func sessionChoicesPreferMainAndRecent() async throws {
         let now = Date().timeIntervalSince1970 * 1000
         let recent = now - (2 * 60 * 60 * 1000)
