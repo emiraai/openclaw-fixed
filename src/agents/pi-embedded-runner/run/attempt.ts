@@ -1,9 +1,10 @@
-import fs from "node:fs/promises";
-import os from "node:os";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { streamSimple } from "@mariozechner/pi-ai";
 import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import fs from "node:fs/promises";
+import os from "node:os";
+import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
@@ -106,7 +107,6 @@ import {
   shouldFlagCompactionTimeout,
 } from "./compaction-timeout.js";
 import { detectAndLoadPromptImages } from "./images.js";
-import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
 
 export function injectHistoryImagesIntoMessages(
   messages: AgentMessage[],
@@ -1015,8 +1015,8 @@ export async function runEmbeddedAttempt(
           }
 
           if (hookRunner?.hasHooks("llm_input")) {
-            hookRunner
-              .runLlmInput(
+            try {
+              const llmInputResult = await hookRunner.runLlmInput(
                 {
                   runId: params.runId,
                   sessionId: params.sessionId,
@@ -1034,10 +1034,22 @@ export async function runEmbeddedAttempt(
                   workspaceDir: params.workspaceDir,
                   messageProvider: params.messageProvider ?? undefined,
                 },
-              )
-              .catch((err) => {
-                log.warn(`llm_input hook failed: ${String(err)}`);
-              });
+              );
+              if (llmInputResult?.block) {
+                throw new Error(llmInputResult.blockReason ?? "LLM request blocked by plugin hook");
+              }
+              if (llmInputResult?.prompt) {
+                effectivePrompt = llmInputResult.prompt;
+              }
+              if (llmInputResult?.systemPrompt) {
+                applySystemPromptOverrideToSession(activeSession, llmInputResult.systemPrompt);
+              }
+            } catch (err) {
+              if (err instanceof Error && err.message.includes("blocked by plugin hook")) {
+                throw err;
+              }
+              log.warn(`llm_input hook failed: ${String(err)}`);
+            }
           }
 
           // Only pass images option if there are actually images to pass
