@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
@@ -8,7 +7,8 @@ import type {
   Tool,
   Usage,
 } from "@mariozechner/pi-ai";
-import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
+import { createAssistantMessageEventStream, registerApiProvider } from "@mariozechner/pi-ai";
+import { randomUUID } from "node:crypto";
 
 export const OLLAMA_NATIVE_BASE_URL = "http://127.0.0.1:11434";
 
@@ -424,4 +424,38 @@ export function createOllamaStreamFn(baseUrl: string): StreamFn {
     queueMicrotask(() => void run());
     return stream;
   };
+}
+
+// ── API provider registration ────────────────────────────────────────────────
+// The SDK's completeSimple() (used by compaction, TTS summarization, and
+// branch summarization) goes through the API provider registry, NOT
+// session.agent.streamFn. Register "ollama" so all completeSimple() call
+// sites can reach the native /api/chat endpoint.
+
+let ollamaApiRegistered = false;
+
+/**
+ * Register the "ollama" API provider in the SDK's global API registry.
+ * Uses model.baseUrl at call time, so it works with any Ollama instance.
+ * Idempotent — safe to call multiple times.
+ */
+export function ensureOllamaApiRegistered(): void {
+  if (ollamaApiRegistered) {
+    return;
+  }
+  const ollamaStreamFn: StreamFn = (model, context, options) => {
+    const baseUrl =
+      typeof model.baseUrl === "string" && model.baseUrl.trim()
+        ? model.baseUrl
+        : OLLAMA_NATIVE_BASE_URL;
+    return createOllamaStreamFn(baseUrl)(model, context, options);
+  };
+  // The SDK's generic types for registerApiProvider don't include "ollama"
+  // since it's not a built-in API type — cast is required.
+  (registerApiProvider as (p: { api: string; stream: StreamFn; streamSimple: StreamFn }) => void)({
+    api: "ollama",
+    stream: ollamaStreamFn,
+    streamSimple: ollamaStreamFn,
+  });
+  ollamaApiRegistered = true;
 }
