@@ -278,6 +278,67 @@ function resolveAntigravityOpus46ForwardCompatModel(
   });
 }
 
+/**
+ * Check if a model ID is a known forward-compat model that can be resolved
+ * from a template model. Used by buildAllowedModelSet to admit forward-compat
+ * models into the allowlist before the catalog catches up.
+ *
+ * Pure function — no ModelRegistry dependency, no side effects.
+ */
+export function isForwardCompatModelId(provider: string, modelId: string): boolean {
+  const normalizedProvider = normalizeProviderId(provider);
+  const lower = modelId.trim().toLowerCase();
+
+  if (normalizedProvider === "openai-codex") {
+    if (
+      lower === OPENAI_CODEX_GPT_53_MODEL_ID ||
+      lower.startsWith(`${OPENAI_CODEX_GPT_53_MODEL_ID}-`)
+    ) {
+      return true;
+    }
+  }
+
+  if (normalizedProvider === "anthropic") {
+    const isOpus46 =
+      lower === ANTHROPIC_OPUS_46_MODEL_ID ||
+      lower === ANTHROPIC_OPUS_46_DOT_MODEL_ID ||
+      lower.startsWith(`${ANTHROPIC_OPUS_46_MODEL_ID}-`) ||
+      lower.startsWith(`${ANTHROPIC_OPUS_46_DOT_MODEL_ID}-`);
+    const isSonnet46 =
+      lower === ANTHROPIC_SONNET_46_MODEL_ID ||
+      lower === ANTHROPIC_SONNET_46_DOT_MODEL_ID ||
+      lower.startsWith(`${ANTHROPIC_SONNET_46_MODEL_ID}-`) ||
+      lower.startsWith(`${ANTHROPIC_SONNET_46_DOT_MODEL_ID}-`);
+    if (isOpus46 || isSonnet46) {
+      return true;
+    }
+  }
+
+  if (normalizedProvider === "google-antigravity") {
+    const isOpus46 =
+      lower === ANTIGRAVITY_OPUS_46_MODEL_ID ||
+      lower === ANTIGRAVITY_OPUS_46_DOT_MODEL_ID ||
+      lower.startsWith(`${ANTIGRAVITY_OPUS_46_MODEL_ID}-`) ||
+      lower.startsWith(`${ANTIGRAVITY_OPUS_46_DOT_MODEL_ID}-`);
+    const isOpus46Thinking =
+      lower === ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID ||
+      lower === ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID ||
+      lower.startsWith(`${ANTIGRAVITY_OPUS_46_THINKING_MODEL_ID}-`) ||
+      lower.startsWith(`${ANTIGRAVITY_OPUS_46_DOT_THINKING_MODEL_ID}-`);
+    if (isOpus46 || isOpus46Thinking) {
+      return true;
+    }
+  }
+
+  if (normalizedProvider === "zai") {
+    if (lower === ZAI_GLM5_MODEL_ID || lower.startsWith(`${ZAI_GLM5_MODEL_ID}-`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function resolveForwardCompatModel(
   provider: string,
   modelId: string,
