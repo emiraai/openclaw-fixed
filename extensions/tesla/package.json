@@ -1,0 +1,14 @@
+{
+  "name": "@openclaw/tesla",
+  "version": "2026.2.16",
+  "description": "Tesla vehicle control plugin — lock, unlock, climate, charging, status, and more via the Tesla Fleet API.",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

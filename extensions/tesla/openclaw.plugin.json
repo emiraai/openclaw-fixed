@@ -1,0 +1,32 @@
+{
+  "id": "tesla",
+  "name": "Tesla",
+  "description": "Control Tesla vehicles via the Tesla Fleet API — lock, unlock, climate, charging, location, and more.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "refreshToken": {
+        "type": "string",
+        "description": "Tesla Fleet API OAuth refresh token."
+      },
+      "clientId": {
+        "type": "string",
+        "description": "Tesla Fleet API application client ID."
+      },
+      "clientSecret": {
+        "type": "string",
+        "description": "Tesla Fleet API application client secret."
+      },
+      "vin": {
+        "type": "string",
+        "description": "Default vehicle VIN (used when not specified per-command)."
+      },
+      "region": {
+        "type": "string",
+        "description": "Fleet API region: na (North America), eu (Europe), cn (China). Defaults to na.",
+        "enum": ["na", "eu", "cn"]
+      }
+    }
+  }
+}
