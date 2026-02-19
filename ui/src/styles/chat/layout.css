@@ -440,3 +440,6 @@
     min-width: 120px;
   }
 }
+
+/* Mobile dropdown toggle — hidden on desktop */
+/* Mobile gear toggle + dropdown are hidden by default in layout.css */
