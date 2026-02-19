@@ -417,6 +417,9 @@ export async function startGatewayServer(
   const broadcastVoiceWakeChanged = (triggers: string[]) => {
     broadcast("voicewake.changed", { triggers }, { dropIfSlow: true });
   };
+  const broadcastVoiceWakeRoutingChanged = (config: VoiceWakeRoutingConfig) => {
+    broadcast("voicewake.routing.changed", { config }, { dropIfSlow: true });
+  };
   const hasMobileNodeConnected = () => hasConnectedMobileNode(nodeRegistry);
   applyGatewayLaneConcurrency(cfgAtStart);
 
@@ -621,6 +624,7 @@ export async function startGatewayServer(
       markChannelLoggedOut,
       wizardRunner,
       broadcastVoiceWakeChanged,
+      broadcastVoiceWakeRoutingChanged,
     },
   });
   logGatewayStartup({
