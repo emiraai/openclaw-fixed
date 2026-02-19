@@ -1,6 +1,6 @@
 import type { AuthProfileStore } from "../agents/auth-profiles.js";
-import { AUTH_CHOICE_LEGACY_ALIASES_FOR_CLI } from "./auth-choice-legacy.js";
 import type { AuthChoice, AuthChoiceGroupId } from "./onboard-types.js";
+import { AUTH_CHOICE_LEGACY_ALIASES_FOR_CLI } from "./auth-choice-legacy.js";
 
 export type { AuthChoiceGroupId };
 
@@ -113,6 +113,12 @@ const AUTH_CHOICE_GROUP_DEFS: {
     choices: ["opencode-zen"],
   },
   {
+    value: "litellm",
+    label: "LiteLLM",
+    hint: "OpenAI-compatible proxy (self-hosted)",
+    choices: ["litellm-api-key"],
+  },
+  {
     value: "xiaomi",
     label: "Xiaomi",
     hint: "API key",
@@ -141,12 +147,6 @@ const AUTH_CHOICE_GROUP_DEFS: {
     label: "Venice AI",
     hint: "Privacy-focused (uncensored models)",
     choices: ["venice-api-key"],
-  },
-  {
-    value: "litellm",
-    label: "LiteLLM",
-    hint: "Unified LLM gateway (100+ providers)",
-    choices: ["litellm-api-key"],
   },
   {
     value: "cloudflare-ai-gateway",
