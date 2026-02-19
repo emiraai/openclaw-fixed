@@ -29,6 +29,13 @@ export type WizardConfirmParams = {
   initialValue?: boolean;
 };
 
+export type WizardSearchableSelectParams<T = string> = {
+  message: string;
+  options: Array<WizardSelectOption<T>>;
+  initialValue?: T;
+  maxVisible?: number;
+};
+
 export type WizardProgress = {
   update: (message: string) => void;
   stop: (message?: string) => void;
@@ -39,6 +46,7 @@ export type WizardPrompter = {
   outro: (message: string) => Promise<void>;
   note: (message: string, title?: string) => Promise<void>;
   select: <T>(params: WizardSelectParams<T>) => Promise<T>;
+  searchableSelect: <T>(params: WizardSearchableSelectParams<T>) => Promise<T>;
   multiselect: <T>(params: WizardMultiSelectParams<T>) => Promise<T[]>;
   text: (params: WizardTextParams) => Promise<string>;
   confirm: (params: WizardConfirmParams) => Promise<boolean>;
