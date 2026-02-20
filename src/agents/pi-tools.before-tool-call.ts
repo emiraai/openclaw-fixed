@@ -10,6 +10,11 @@ export type HookContext = {
   agentId?: string;
   sessionKey?: string;
   loopDetection?: ToolLoopDetectionConfig;
+  senderId?: string;
+  senderName?: string;
+  senderUsername?: string;
+  senderE164?: string;
+  runId?: string;
 };
 
 type HookOutcome = { blocked: true; reason: string } | { blocked: false; params: unknown };
@@ -148,6 +153,11 @@ export async function runBeforeToolCallHook(args: {
         toolName,
         agentId: args.ctx?.agentId,
         sessionKey: args.ctx?.sessionKey,
+        senderId: args.ctx?.senderId,
+        senderName: args.ctx?.senderName,
+        senderUsername: args.ctx?.senderUsername,
+        senderE164: args.ctx?.senderE164,
+        runId: args.ctx?.runId,
       },
     );
 

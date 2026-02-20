@@ -324,6 +324,15 @@ export type PluginHookAgentContext = {
   sessionId?: string;
   workspaceDir?: string;
   messageProvider?: string;
+  messageChannel?: string;
+  accountId?: string;
+  senderId?: string;
+  senderName?: string;
+  senderUsername?: string;
+  senderE164?: string;
+  runId?: string;
+  model?: unknown;
+  modelRegistry?: unknown;
 };
 
 // before_model_resolve hook
@@ -356,6 +365,11 @@ export type PluginHookBeforeAgentStartEvent = {
   prompt: string;
   /** Optional because legacy hook can run in pre-session phase. */
   messages?: unknown[];
+  tools?: Array<{
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  }>;
 };
 
 export type PluginHookBeforeAgentStartResult = PluginHookBeforePromptBuildResult &
@@ -469,6 +483,13 @@ export type PluginHookToolContext = {
   agentId?: string;
   sessionKey?: string;
   toolName: string;
+  senderId?: string;
+  senderName?: string;
+  senderUsername?: string;
+  senderE164?: string;
+  runId?: string;
+  intentTokenRaw?: string;
+  csrgPath?: string;
 };
 
 // before_tool_call hook
