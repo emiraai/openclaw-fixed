@@ -1,19 +1,23 @@
 import { confirm as clackConfirm, select as clackSelect, text as clackText } from "@clack/prompts";
+import type { AuthProfileCredential } from "../../agents/auth-profiles/types.js";
+import type { ProviderAuthResult, ProviderPlugin } from "../../plugins/types.js";
+import type { RuntimeEnv } from "../../runtime.js";
 import {
   resolveAgentDir,
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
-import { upsertAuthProfile } from "../../agents/auth-profiles.js";
-import type { AuthProfileCredential } from "../../agents/auth-profiles/types.js";
+import {
+  upsertAuthProfile,
+  ensureAuthProfileStore,
+  listProfilesForProvider,
+} from "../../agents/auth-profiles.js";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import { parseDurationMs } from "../../cli/parse-duration.js";
 import { logConfigUpdated } from "../../config/logging.js";
 import { resolvePluginProviders } from "../../plugins/providers.js";
-import type { ProviderAuthResult, ProviderPlugin } from "../../plugins/types.js";
-import type { RuntimeEnv } from "../../runtime.js";
 import { stylePromptHint, stylePromptMessage } from "../../terminal/prompt-style.js";
 import { createClackPrompter } from "../../wizard/clack-prompter.js";
 import { validateAnthropicSetupToken } from "../auth-token.js";
@@ -238,6 +242,7 @@ type LoginOptions = {
   provider?: string;
   method?: string;
   setDefault?: boolean;
+  add?: boolean;
 };
 
 export function resolveRequestedLoginProviderOrThrow(
@@ -328,6 +333,11 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
     throw new Error("Unknown auth method. Use --method <id> to select one.");
   }
 
+  const providerKey = normalizeProviderId(selectedProvider.id);
+  const existingProfileIds = opts.add
+    ? listProfilesForProvider(ensureAuthProfileStore(agentDir), providerKey)
+    : [];
+
   const isRemote = isRemoteEnvironment();
   const result: ProviderAuthResult = await chosenMethod.run({
     config,
@@ -344,7 +354,23 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
     },
   });
 
-  for (const profile of result.profiles) {
+  const updatedProfiles = result.profiles.map((profile) => {
+    if (!opts.add) {
+      return profile;
+    }
+    let profileId = profile.profileId;
+    let counter = 1;
+    while (
+      existingProfileIds.includes(profileId) ||
+      result.profiles.some((p) => p.profileId === profileId && p !== profile)
+    ) {
+      profileId = `${profile.profileId}-${counter}`;
+      counter++;
+    }
+    return { ...profile, profileId };
+  });
+
+  for (const profile of updatedProfiles) {
     upsertAuthProfile({
       profileId: profile.profileId,
       credential: profile.credential,
@@ -357,7 +383,7 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
     if (result.configPatch) {
       next = mergeConfigPatch(next, result.configPatch);
     }
-    for (const profile of result.profiles) {
+    for (const profile of updatedProfiles) {
       next = applyAuthProfileConfig(next, {
         profileId: profile.profileId,
         provider: profile.credential.provider,
@@ -371,9 +397,14 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
   });
 
   logConfigUpdated(runtime);
-  for (const profile of result.profiles) {
+  for (const profile of updatedProfiles) {
     runtime.log(
       `Auth profile: ${profile.profileId} (${profile.credential.provider}/${credentialMode(profile.credential)})`,
+    );
+  }
+  if (opts.add && updatedProfiles.length > 0) {
+    runtime.log(
+      `Added ${updatedProfiles.length} additional account(s). Use "openclaw models auth order" to manage account priority.`,
     );
   }
   if (result.defaultModel) {

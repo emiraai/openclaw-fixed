@@ -1,6 +1,9 @@
 import type { Api, Model } from "@mariozechner/pi-ai";
-import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
+import type { ModelRegistry } from "../../agents/pi-model-discovery.js";
+import type { OpenClawConfig } from "../../config/config.js";
+import type { ModelRow } from "./list.types.js";
+import { resolveOpenClawAgentDir } from "../../agents/agent-paths.js";
 import { listProfilesForProvider } from "../../agents/auth-profiles.js";
 import {
   getCustomProviderApiKey,
@@ -13,15 +16,12 @@ import {
 } from "../../agents/model-forward-compat.js";
 import { ensureOpenClawModelsJson } from "../../agents/models-config.js";
 import { ensurePiAuthJsonFromAuthProfiles } from "../../agents/pi-auth-json.js";
-import type { ModelRegistry } from "../../agents/pi-model-discovery.js";
 import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
-import type { OpenClawConfig } from "../../config/config.js";
 import {
   formatErrorWithStack,
   MODEL_AVAILABILITY_UNAVAILABLE_CODE,
   shouldFallbackToAuthHeuristics,
 } from "./list.errors.js";
-import type { ModelRow } from "./list.types.js";
 import { isLocalBaseUrl, modelKey } from "./shared.js";
 
 const hasAuthForProvider = (
@@ -205,14 +205,12 @@ export function toModelRow(params: {
 
   const input = model.input.join("+") || "text";
   const local = isLocalBaseUrl(model.baseUrl);
-  // Prefer model-level registry availability when present.
-  // Fall back to provider-level auth heuristics only if registry availability isn't available.
+  // Prefer provider-level auth heuristics when cfg and authStore are available.
+  // Fall back to registry-level availability keys otherwise.
   const available =
-    availableKeys !== undefined
-      ? availableKeys.has(modelKey(model.provider, model.id))
-      : cfg && authStore
-        ? hasAuthForProvider(model.provider, cfg, authStore)
-        : false;
+    cfg && authStore
+      ? hasAuthForProvider(model.provider, cfg, authStore)
+      : (availableKeys?.has(modelKey(model.provider, model.id)) ?? false);
   const aliasTags = aliases.length > 0 ? [`alias:${aliases.join(",")}`] : [];
   const mergedTags = new Set(tags);
   if (aliasTags.length > 0) {
