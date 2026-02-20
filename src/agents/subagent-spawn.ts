@@ -49,6 +49,7 @@ export type SpawnSubagentResult = {
   runId?: string;
   note?: string;
   modelApplied?: boolean;
+  warning?: string;
   error?: string;
 };
 
@@ -189,6 +190,7 @@ export async function spawnSubagentDirect(
     };
   }
 
+  let modelWarning: string | undefined;
   if (resolvedModel) {
     try {
       await callGateway({
@@ -200,11 +202,16 @@ export async function spawnSubagentDirect(
     } catch (err) {
       const messageText =
         err instanceof Error ? err.message : typeof err === "string" ? err : "error";
-      return {
-        status: "error",
-        error: messageText,
-        childSessionKey,
-      };
+      if (messageText.includes("model not allowed") || messageText.includes("invalid model")) {
+        // Graceful fallback: task runs with default model
+        modelWarning = `${messageText} — task will run with the default model instead`;
+      } else {
+        return {
+          status: "error",
+          error: messageText,
+          childSessionKey,
+        };
+      }
     }
   }
   if (thinkingOverride !== undefined) {
@@ -301,5 +308,6 @@ export async function spawnSubagentDirect(
     runId: childRunId,
     note: SUBAGENT_SPAWN_ACCEPTED_NOTE,
     modelApplied: resolvedModel ? modelApplied : undefined,
+    warning: modelWarning,
   };
 }
