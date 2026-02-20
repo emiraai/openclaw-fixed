@@ -482,7 +482,8 @@ describe("update-cli", () => {
       force: true,
       json: undefined,
     });
-    expect(runRestartScript).toHaveBeenCalled();
+    // runDaemonInstall performs kickstart internally; no additional restart should fire
+    expect(runRestartScript).not.toHaveBeenCalled();
     expect(runDaemonRestart).not.toHaveBeenCalled();
   });
 
@@ -509,7 +510,7 @@ describe("update-cli", () => {
     expect(runDaemonRestart).toHaveBeenCalled();
   });
 
-  it("updateCommand falls back to restart when no detached restart script is available", async () => {
+  it("updateCommand does not fall back to runDaemonRestart when runDaemonInstall succeeds (no restart script)", async () => {
     const mockResult: UpdateRunResult = {
       status: "ok",
       mode: "git",
@@ -529,7 +530,8 @@ describe("update-cli", () => {
       force: true,
       json: undefined,
     });
-    expect(runDaemonRestart).toHaveBeenCalled();
+    // runDaemonInstall performs kickstart internally; runDaemonRestart must not also fire
+    expect(runDaemonRestart).not.toHaveBeenCalled();
   });
 
   it("updateCommand does not refresh service env when --no-restart is set", async () => {

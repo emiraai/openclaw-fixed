@@ -406,6 +406,10 @@ async function maybeRestartService(params: {
       if (params.refreshServiceEnv) {
         try {
           await runDaemonInstall({ force: true, json: params.opts.json });
+          // runDaemonInstall performs a full reinstall including launchctl kickstart,
+          // which itself restarts the service. Mark as initiated to prevent a second
+          // restart from runRestartScript or runDaemonRestart racing with it.
+          restartInitiated = true;
         } catch (err) {
           if (!params.opts.json) {
             defaultRuntime.log(
@@ -416,10 +420,10 @@ async function maybeRestartService(params: {
           }
         }
       }
-      if (params.restartScriptPath) {
+      if (!restartInitiated && params.restartScriptPath) {
         await runRestartScript(params.restartScriptPath);
         restartInitiated = true;
-      } else {
+      } else if (!restartInitiated) {
         restarted = await runDaemonRestart();
       }
 
