@@ -179,9 +179,10 @@ describe("msteams messenger", () => {
 
     it("preserves parsed mentions when appending OneDrive fallback file links", async () => {
       const previousStateDir = process.env.OPENCLAW_STATE_DIR;
-      const tmpStateDir = await mkdtemp(path.join(os.tmpdir(), "msteams-mention-state-"));
-      process.env.OPENCLAW_STATE_DIR = tmpStateDir;
-      const workspaceDir = path.join(tmpStateDir, "workspace");
+      const stateDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-msteams-state-"));
+      process.env.OPENCLAW_STATE_DIR = stateDir;
+
+      const workspaceDir = path.join(stateDir, "workspace", "msteams-mention");
       await mkdir(workspaceDir, { recursive: true });
       const localFile = path.join(workspaceDir, "note.txt");
       await writeFile(localFile, "hello");
@@ -241,7 +242,11 @@ describe("msteams messenger", () => {
         } else {
           process.env.OPENCLAW_STATE_DIR = previousStateDir;
         }
+<<<<<<< HEAD
         await rm(tmpStateDir, { recursive: true, force: true });
+=======
+        await rm(stateDir, { recursive: true, force: true });
+>>>>>>> f09ea557a (Tests: use allowed local root in msteams media mention fixture)
       }
     });
 
