@@ -174,6 +174,11 @@ export function createGatewayTool(opts?: {
         return jsonResult({ ok: true, result });
       }
       if (action === "config.apply") {
+        if (opts?.config?.commands?.restart !== true) {
+          throw new Error(
+            "Gateway restart is disabled. Set commands.restart=true to enable. (config.apply triggers a restart as a side effect)",
+          );
+        }
         const { raw, baseHash, sessionKey, note, restartDelayMs } =
           await resolveConfigWriteParams();
         const result = await callGatewayTool("config.apply", gatewayOpts, {
@@ -186,6 +191,11 @@ export function createGatewayTool(opts?: {
         return jsonResult({ ok: true, result });
       }
       if (action === "config.patch") {
+        if (opts?.config?.commands?.restart !== true) {
+          throw new Error(
+            "Gateway restart is disabled. Set commands.restart=true to enable. (config.patch triggers a restart as a side effect)",
+          );
+        }
         const { raw, baseHash, sessionKey, note, restartDelayMs } =
           await resolveConfigWriteParams();
         const result = await callGatewayTool("config.patch", gatewayOpts, {
