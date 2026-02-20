@@ -21,7 +21,7 @@ async function withAudioFixture(
   const originalPath = process.env.PATH;
   process.env.PATH = "/usr/bin:/bin";
   const tmpPath = path.join(os.tmpdir(), `openclaw-auto-audio-${Date.now()}.wav`);
-  await fs.writeFile(tmpPath, Buffer.from("RIFF"));
+  await fs.writeFile(tmpPath, Buffer.alloc(2048));
   const ctx: MsgContext = { MediaPath: tmpPath, MediaType: "audio/wav" };
   const media = normalizeMediaAttachments(ctx);
   const cache = createMediaAttachmentCache(media);
