@@ -3,6 +3,7 @@ import path from "node:path";
 import { CURRENT_SESSION_VERSION, SessionManager } from "@mariozechner/pi-coding-agent";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { resolveThinkingDefault } from "../../agents/model-selection.js";
+import { acquireSessionWriteLock } from "../../agents/session-write-lock.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
@@ -327,7 +328,7 @@ function transcriptHasIdempotencyKey(transcriptPath: string, idempotencyKey: str
   }
 }
 
-function appendAssistantTranscriptMessage(params: {
+async function appendAssistantTranscriptMessage(params: {
   message: string;
   label?: string;
   sessionId: string;
@@ -341,7 +342,7 @@ function appendAssistantTranscriptMessage(params: {
     origin: AbortOrigin;
     runId: string;
   };
-}): TranscriptAppendResult {
+}): Promise<TranscriptAppendResult> {
   const transcriptPath = resolveTranscriptPath({
     sessionId: params.sessionId,
     storePath: params.storePath,
@@ -409,6 +410,10 @@ function appendAssistantTranscriptMessage(params: {
       : {}),
   };
 
+  const sessionLock = await acquireSessionWriteLock({
+    sessionFile: transcriptPath,
+    maxHoldMs: 10_000,
+  });
   try {
     // IMPORTANT: Use SessionManager so the entry is attached to the current leaf via parentId.
     // Raw jsonl appends break the parent chain and can hide compaction summaries from context.
@@ -417,6 +422,8 @@ function appendAssistantTranscriptMessage(params: {
     return { ok: true, messageId, message: messageBody };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    await sessionLock.release();
   }
 }
 
@@ -445,7 +452,7 @@ function collectSessionAbortPartials(params: {
   return out;
 }
 
-function persistAbortedPartials(params: {
+async function persistAbortedPartials(params: {
   context: Pick<GatewayRequestContext, "logGateway">;
   sessionKey: string;
   snapshots: AbortedPartialSnapshot[];
@@ -456,7 +463,7 @@ function persistAbortedPartials(params: {
   const { storePath, entry } = loadSessionEntry(params.sessionKey);
   for (const snapshot of params.snapshots) {
     const sessionId = entry?.sessionId ?? snapshot.sessionId ?? snapshot.runId;
-    const appended = appendAssistantTranscriptMessage({
+    const appended = await appendAssistantTranscriptMessage({
       message: snapshot.text,
       sessionId,
       storePath,
@@ -508,7 +515,7 @@ function abortChatRunsForSessionKeyWithPartials(params: {
     stopReason: params.stopReason,
   });
   if (res.aborted) {
-    persistAbortedPartials({
+    void persistAbortedPartials({
       context: params.context,
       sessionKey: params.sessionKey,
       snapshots,
@@ -682,7 +689,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       stopReason: "rpc",
     });
     if (res.aborted && partialText && partialText.trim()) {
-      persistAbortedPartials({
+      void persistAbortedPartials({
         context,
         sessionKey: rawSessionKey,
         snapshots: [
@@ -920,7 +927,7 @@ export const chatHandlers: GatewayRequestHandlers = {
           onModelSelected,
         },
       })
-        .then(() => {
+        .then(async () => {
           if (!agentRunStarted) {
             const combinedReply = finalReplyParts
               .map((part) => part.trim())
@@ -932,7 +939,7 @@ export const chatHandlers: GatewayRequestHandlers = {
               const { storePath: latestStorePath, entry: latestEntry } =
                 loadSessionEntry(sessionKey);
               const sessionId = latestEntry?.sessionId ?? entry?.sessionId ?? clientRunId;
-              const appended = appendAssistantTranscriptMessage({
+              const appended = await appendAssistantTranscriptMessage({
                 message: combinedReply,
                 sessionId,
                 storePath: latestStorePath,
@@ -1039,7 +1046,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       return;
     }
 
-    const appended = appendAssistantTranscriptMessage({
+    const appended = await appendAssistantTranscriptMessage({
       message: p.message,
       label: p.label,
       sessionId,
