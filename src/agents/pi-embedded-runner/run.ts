@@ -36,6 +36,7 @@ import {
   isLikelyContextOverflowError,
   isFailoverAssistantError,
   isFailoverErrorMessage,
+  isThinkingImmutabilityError,
   parseImageSizeError,
   parseImageDimensionError,
   isRateLimitAssistantError,
@@ -786,6 +787,36 @@ export async function runEmbeddedPiAgent(
                   },
                   systemPromptReport: attempt.systemPromptReport,
                   error: { kind: "role_ordering", message: errorText },
+                },
+              };
+            }
+            // Handle thinking block immutability errors. The Anthropic API rejects requests
+            // when thinking/redacted_thinking blocks in the latest assistant message have
+            // been modified (e.g. thinkingSignature stripped by session sanitizers).
+            // This causes a total session failure with no automatic recovery path.
+            if (isThinkingImmutabilityError(errorText)) {
+              log.warn(
+                `[thinking-immutability] Thinking block immutability error detected for session=${params.sessionKey ?? params.sessionId}. ` +
+                  `Session history contains modified thinking blocks rejected by the API.`,
+              );
+              return {
+                payloads: [
+                  {
+                    text:
+                      "Session history contains modified thinking blocks that the API rejected. " +
+                      "Use /new or /reset to start a fresh session.",
+                    isError: true,
+                  },
+                ],
+                meta: {
+                  durationMs: Date.now() - started,
+                  agentMeta: {
+                    sessionId: sessionIdUsed,
+                    provider,
+                    model: model.id,
+                  },
+                  systemPromptReport: attempt.systemPromptReport,
+                  error: { kind: "thinking_immutability", message: errorText },
                 },
               };
             }
