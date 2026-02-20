@@ -223,6 +223,111 @@ describe("processDiscordMessage ack reactions", () => {
   });
 });
 
+describe("processDiscordMessage statusReactions config", () => {
+  it("skips all reactions when statusReactions.enabled is false", async () => {
+    const ctx = await createBaseContext({
+      discordConfig: { statusReactions: { enabled: false } },
+    });
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    await processDiscordMessage(ctx as any);
+
+    expect(reactMessageDiscord).not.toHaveBeenCalled();
+  });
+
+  it("uses custom done emoji instead of default ✅", async () => {
+    const ctx = await createBaseContext({
+      discordConfig: { statusReactions: { emojis: { done: "🎉" } } },
+    });
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    await processDiscordMessage(ctx as any);
+
+    const emojis = (
+      reactMessageDiscord.mock.calls as unknown as Array<[unknown, unknown, string]>
+    ).map((call) => call[2]);
+    expect(emojis).toContain("🎉");
+    expect(emojis).not.toContain("✅");
+  });
+
+  it("uses custom error emoji instead of default ❌", async () => {
+    dispatchInboundMessage.mockImplementationOnce(async () => {
+      throw new Error("boom");
+    });
+
+    const ctx = await createBaseContext({
+      discordConfig: { statusReactions: { emojis: { error: "💥" } } },
+    });
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    await expect(processDiscordMessage(ctx as any)).rejects.toThrow("boom");
+
+    const emojis = (
+      reactMessageDiscord.mock.calls as unknown as Array<[unknown, unknown, string]>
+    ).map((call) => call[2]);
+    expect(emojis).toContain("💥");
+    expect(emojis).not.toContain("❌");
+  });
+
+  it("uses custom stall emojis for long no-progress runs", async () => {
+    vi.useFakeTimers();
+    dispatchInboundMessage.mockImplementationOnce(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 31_000);
+      });
+      return { queuedFinal: false, counts: { final: 0, tool: 0, block: 0 } };
+    });
+
+    const ctx = await createBaseContext({
+      discordConfig: { statusReactions: { emojis: { stallSoft: "⌛", stallHard: "🔥" } } },
+    });
+    // oxlint-disable-next-line typescript/no-explicit-any
+    const runPromise = processDiscordMessage(ctx as any);
+
+    let settled = false;
+    void runPromise.finally(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 120 && !settled; i++) {
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+
+    await runPromise;
+    const emojis = (
+      reactMessageDiscord.mock.calls as unknown as Array<[unknown, unknown, string]>
+    ).map((call) => call[2]);
+    expect(emojis).toContain("⌛");
+    expect(emojis).toContain("🔥");
+    expect(emojis).not.toContain("⏳");
+    expect(emojis).not.toContain("⚠️");
+  });
+
+  it("uses custom coding emoji for coding tool calls after debounce", async () => {
+    vi.useFakeTimers();
+    dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {
+      await params?.replyOptions?.onToolStart?.({ name: "exec" });
+      // advance past the 700ms debounce so the pending coding emoji is applied
+      await vi.advanceTimersByTimeAsync(800);
+      return { queuedFinal: false, counts: { final: 0, tool: 0, block: 0 } };
+    });
+
+    const ctx = await createBaseContext({
+      discordConfig: { statusReactions: { emojis: { coding: "📝", done: "🎉" } } },
+    });
+
+    // oxlint-disable-next-line typescript/no-explicit-any
+    await processDiscordMessage(ctx as any);
+
+    const emojis = (
+      reactMessageDiscord.mock.calls as unknown as Array<[unknown, unknown, string]>
+    ).map((call) => call[2]);
+    expect(emojis).toContain("📝");
+    expect(emojis).toContain("🎉");
+    expect(emojis).not.toContain("💻");
+    expect(emojis).not.toContain("✅");
+  });
+});
+
 describe("processDiscordMessage session routing", () => {
   it("stores DM lastRoute with user target for direct-session continuity", async () => {
     const ctx = await createBaseContext({

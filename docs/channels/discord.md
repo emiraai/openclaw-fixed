@@ -624,6 +624,51 @@ See [Slash commands](/tools/slash-commands) for command catalog and behavior.
 
   </Accordion>
 
+  <Accordion title="Status reactions">
+    When `ackReaction` is set, OpenClaw cycles through phase emojis while processing a message:
+
+    `queued → thinking → tool phase → done / error`
+
+    The queued emoji is the `ackReaction` value. All other phase emojis are configurable under `statusReactions.emojis`:
+
+    | Key | Default | Phase |
+    |---|---|---|
+    | _(ackReaction)_ | 👀 | Queued / waiting |
+    | `thinking` | 🧠 | Reasoning / thinking |
+    | `tool` | 🛠️ | Generic tool call |
+    | `coding` | 💻 | Coding/file tools (exec, read, write, bash, …) |
+    | `web` | 🌐 | Web/browser tools |
+    | `done` | ✅ | Completed successfully |
+    | `error` | ❌ | Errored |
+    | `stallSoft` | ⏳ | No progress for 10 s |
+    | `stallHard` | ⚠️ | No progress for 30 s |
+
+    Omit any key to keep its default. Set an emoji to `""` to suppress that specific state while keeping all others. Set `enabled: false` to suppress all reactions entirely, including the ack.
+
+```json5
+{
+  channels: {
+    discord: {
+      statusReactions: {
+        enabled: true, // set false to suppress all reactions (including ack); set individual emojis to "" to disable only that state
+        emojis: {
+          thinking: "🧠",
+          tool: "🛠️",
+          coding: "💻",
+          web: "🌐",
+          done: "✅",
+          error: "❌",
+          stallSoft: "⏳",
+          stallHard: "⚠️",
+        },
+      },
+    },
+  },
+}
+```
+
+  </Accordion>
+
   <Accordion title="Config writes">
     Channel-initiated config writes are enabled by default.
 

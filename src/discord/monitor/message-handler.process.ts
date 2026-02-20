@@ -43,19 +43,30 @@ import { deliverDiscordReply } from "./reply-delivery.js";
 import { resolveDiscordAutoThreadReplyPlan, resolveDiscordThreadStarter } from "./threading.js";
 import { sendTyping } from "./typing.js";
 
-const DISCORD_STATUS_THINKING_EMOJI = "🧠";
-const DISCORD_STATUS_TOOL_EMOJI = "🛠️";
-const DISCORD_STATUS_CODING_EMOJI = "💻";
-const DISCORD_STATUS_WEB_EMOJI = "🌐";
-const DISCORD_STATUS_DONE_EMOJI = "✅";
-const DISCORD_STATUS_ERROR_EMOJI = "❌";
-const DISCORD_STATUS_STALL_SOFT_EMOJI = "⏳";
-const DISCORD_STATUS_STALL_HARD_EMOJI = "⚠️";
+const DISCORD_STATUS_THINKING_EMOJI_DEFAULT = "🧠";
+const DISCORD_STATUS_TOOL_EMOJI_DEFAULT = "🛠️";
+const DISCORD_STATUS_CODING_EMOJI_DEFAULT = "💻";
+const DISCORD_STATUS_WEB_EMOJI_DEFAULT = "🌐";
+const DISCORD_STATUS_DONE_EMOJI_DEFAULT = "✅";
+const DISCORD_STATUS_ERROR_EMOJI_DEFAULT = "❌";
+const DISCORD_STATUS_STALL_SOFT_EMOJI_DEFAULT = "⏳";
+const DISCORD_STATUS_STALL_HARD_EMOJI_DEFAULT = "⚠️";
 const DISCORD_STATUS_DONE_HOLD_MS = 1500;
 const DISCORD_STATUS_ERROR_HOLD_MS = 2500;
 const DISCORD_STATUS_DEBOUNCE_MS = 700;
 const DISCORD_STATUS_STALL_SOFT_MS = 10_000;
 const DISCORD_STATUS_STALL_HARD_MS = 30_000;
+
+type DiscordStatusEmojis = {
+  thinking: string;
+  tool: string;
+  coding: string;
+  web: string;
+  done: string;
+  error: string;
+  stallSoft: string;
+  stallHard: string;
+};
 
 const CODING_STATUS_TOOL_TOKENS = [
   "exec",
@@ -69,18 +80,18 @@ const CODING_STATUS_TOOL_TOKENS = [
 
 const WEB_STATUS_TOOL_TOKENS = ["web_search", "web-search", "web_fetch", "web-fetch", "browser"];
 
-function resolveToolStatusEmoji(toolName?: string): string {
+function resolveToolStatusEmoji(toolName: string | undefined, emojis: DiscordStatusEmojis): string {
   const normalized = toolName?.trim().toLowerCase() ?? "";
   if (!normalized) {
-    return DISCORD_STATUS_TOOL_EMOJI;
+    return emojis.tool;
   }
   if (WEB_STATUS_TOOL_TOKENS.some((token) => normalized.includes(token))) {
-    return DISCORD_STATUS_WEB_EMOJI;
+    return emojis.web;
   }
   if (CODING_STATUS_TOOL_TOKENS.some((token) => normalized.includes(token))) {
-    return DISCORD_STATUS_CODING_EMOJI;
+    return emojis.coding;
   }
-  return DISCORD_STATUS_TOOL_EMOJI;
+  return emojis.tool;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -95,6 +106,7 @@ function createDiscordStatusReactionController(params: {
   messageId: string;
   initialEmoji: string;
   rest: unknown;
+  emojis: DiscordStatusEmojis;
 }) {
   let activeEmoji: string | null = null;
   let chain: Promise<void> = Promise.resolve();
@@ -185,13 +197,13 @@ function createDiscordStatusReactionController(params: {
       if (finished) {
         return;
       }
-      void requestEmoji(DISCORD_STATUS_STALL_SOFT_EMOJI, { immediate: true });
+      void requestEmoji(params.emojis.stallSoft, { immediate: true });
     }, DISCORD_STATUS_STALL_SOFT_MS);
     hardStallTimer = setTimeout(() => {
       if (finished) {
         return;
       }
-      void requestEmoji(DISCORD_STATUS_STALL_HARD_EMOJI, { immediate: true });
+      void requestEmoji(params.emojis.stallHard, { immediate: true });
     }, DISCORD_STATUS_STALL_HARD_MS);
   };
 
@@ -220,17 +232,27 @@ function createDiscordStatusReactionController(params: {
     clearStallTimers();
     clearPendingDebounce();
     await enqueue(async () => {
+      // Include both configured and default emojis so cleanup works even when
+      // the config changed between message start and reply completion.
       const cleanupCandidates = new Set<string>([
         params.initialEmoji,
         activeEmoji ?? "",
-        DISCORD_STATUS_THINKING_EMOJI,
-        DISCORD_STATUS_TOOL_EMOJI,
-        DISCORD_STATUS_CODING_EMOJI,
-        DISCORD_STATUS_WEB_EMOJI,
-        DISCORD_STATUS_DONE_EMOJI,
-        DISCORD_STATUS_ERROR_EMOJI,
-        DISCORD_STATUS_STALL_SOFT_EMOJI,
-        DISCORD_STATUS_STALL_HARD_EMOJI,
+        params.emojis.thinking,
+        params.emojis.tool,
+        params.emojis.coding,
+        params.emojis.web,
+        params.emojis.done,
+        params.emojis.error,
+        params.emojis.stallSoft,
+        params.emojis.stallHard,
+        DISCORD_STATUS_THINKING_EMOJI_DEFAULT,
+        DISCORD_STATUS_TOOL_EMOJI_DEFAULT,
+        DISCORD_STATUS_CODING_EMOJI_DEFAULT,
+        DISCORD_STATUS_WEB_EMOJI_DEFAULT,
+        DISCORD_STATUS_DONE_EMOJI_DEFAULT,
+        DISCORD_STATUS_ERROR_EMOJI_DEFAULT,
+        DISCORD_STATUS_STALL_SOFT_EMOJI_DEFAULT,
+        DISCORD_STATUS_STALL_HARD_EMOJI_DEFAULT,
       ]);
       activeEmoji = null;
       for (const emoji of cleanupCandidates) {
@@ -268,10 +290,10 @@ function createDiscordStatusReactionController(params: {
       scheduleStallTimers();
       return requestEmoji(params.initialEmoji, { immediate: true });
     },
-    setThinking: () => setPhase(DISCORD_STATUS_THINKING_EMOJI),
-    setTool: (toolName?: string) => setPhase(resolveToolStatusEmoji(toolName)),
-    setDone: () => setTerminal(DISCORD_STATUS_DONE_EMOJI),
-    setError: () => setTerminal(DISCORD_STATUS_ERROR_EMOJI),
+    setThinking: () => setPhase(params.emojis.thinking),
+    setTool: (toolName?: string) => setPhase(resolveToolStatusEmoji(toolName, params.emojis)),
+    setDone: () => setTerminal(params.emojis.done),
+    setError: () => setTerminal(params.emojis.error),
     clear,
     restoreInitial,
   };
@@ -348,13 +370,25 @@ export async function processDiscordMessage(ctx: DiscordMessagePreflightContext)
         shouldBypassMention,
       }),
     );
-  const statusReactionsEnabled = shouldAckReaction();
+  const statusReactionsConfig = discordConfig?.statusReactions;
+  const statusReactionsEnabled = shouldAckReaction() && statusReactionsConfig?.enabled !== false;
+  const statusEmojis: DiscordStatusEmojis = {
+    thinking: statusReactionsConfig?.emojis?.thinking ?? DISCORD_STATUS_THINKING_EMOJI_DEFAULT,
+    tool: statusReactionsConfig?.emojis?.tool ?? DISCORD_STATUS_TOOL_EMOJI_DEFAULT,
+    coding: statusReactionsConfig?.emojis?.coding ?? DISCORD_STATUS_CODING_EMOJI_DEFAULT,
+    web: statusReactionsConfig?.emojis?.web ?? DISCORD_STATUS_WEB_EMOJI_DEFAULT,
+    done: statusReactionsConfig?.emojis?.done ?? DISCORD_STATUS_DONE_EMOJI_DEFAULT,
+    error: statusReactionsConfig?.emojis?.error ?? DISCORD_STATUS_ERROR_EMOJI_DEFAULT,
+    stallSoft: statusReactionsConfig?.emojis?.stallSoft ?? DISCORD_STATUS_STALL_SOFT_EMOJI_DEFAULT,
+    stallHard: statusReactionsConfig?.emojis?.stallHard ?? DISCORD_STATUS_STALL_HARD_EMOJI_DEFAULT,
+  };
   const statusReactions = createDiscordStatusReactionController({
     enabled: statusReactionsEnabled,
     channelId: messageChannelId,
     messageId: message.id,
     initialEmoji: ackReaction,
     rest: client.rest,
+    emojis: statusEmojis,
   });
   if (statusReactionsEnabled) {
     void statusReactions.setQueued();
