@@ -6,6 +6,7 @@ import {
   resolveChannelMatchConfig,
   type ChannelMatchSource,
 } from "../../channels/channel-config.js";
+import type { ReactionDelivery } from "../../config/types.reactions.js";
 import { formatDiscordUserTag } from "./format.js";
 
 export type DiscordAllowList = {
@@ -21,6 +22,9 @@ export type DiscordGuildEntryResolved = {
   slug?: string;
   requireMention?: boolean;
   reactionNotifications?: "off" | "own" | "all" | "allowlist";
+  reactionDelivery?: ReactionDelivery;
+  reactionBundleWindowMs?: number;
+  reactionIncludeMessage?: boolean;
   users?: string[];
   roles?: string[];
   channels?: Record<
