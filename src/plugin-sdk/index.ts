@@ -68,7 +68,9 @@ export type {
   OpenClawPluginServiceContext,
   ProviderAuthContext,
   ProviderAuthResult,
+  StreamFnWrapperFn,
 } from "../plugins/types.js";
+export type { StreamFn } from "@mariozechner/pi-agent-core";
 export type {
   GatewayRequestHandler,
   GatewayRequestHandlerOptions,
