@@ -1,4 +1,5 @@
 import type { loadConfig } from "../../../config/config.js";
+import { logVerbose } from "../../../globals.js";
 import type { resolveAgentRoute } from "../../../routing/resolve-route.js";
 import { buildAgentSessionKey } from "../../../routing/resolve-route.js";
 import {
@@ -6,6 +7,7 @@ import {
   DEFAULT_MAIN_KEY,
   normalizeAgentId,
 } from "../../../routing/session-key.js";
+import { resolveSendPolicy } from "../../../sessions/send-policy.js";
 import { formatError } from "../../session.js";
 import { whatsappInboundLog } from "../loggers.js";
 import type { WebInboundMsg } from "../types.js";
@@ -71,6 +73,19 @@ export async function maybeBroadcastMessage(params: {
         mainKey: DEFAULT_MAIN_KEY,
       }),
     };
+
+    const agentSendPolicy = resolveSendPolicy({
+      cfg: params.cfg,
+      sessionKey: agentRoute.sessionKey,
+      channel: "whatsapp",
+      chatType: params.msg.chatType === "group" ? "group" : undefined,
+    });
+    if (agentSendPolicy === "deny") {
+      logVerbose(
+        `Broadcast auto-reply blocked by sendPolicy for agent ${agentId} session ${agentRoute.sessionKey}`,
+      );
+      return false;
+    }
 
     try {
       return await params.processMessage(params.msg, agentRoute, params.groupHistoryKey, {

@@ -4,6 +4,7 @@ import { loadConfig } from "../../../config/config.js";
 import { logVerbose } from "../../../globals.js";
 import { resolveAgentRoute } from "../../../routing/resolve-route.js";
 import { buildGroupHistoryKey } from "../../../routing/session-key.js";
+import { resolveSendPolicy } from "../../../sessions/send-policy.js";
 import { normalizeE164 } from "../../../utils.js";
 import type { MentionConfig } from "../mentions.js";
 import type { WebInboundMsg } from "../types.js";
@@ -151,6 +152,7 @@ export function createWebOnMessageHandler(params: {
 
     // Broadcast groups: when we'd reply anyway, run multiple agents.
     // Does not bypass group mention/activation gating above.
+    // Broadcast agents enforce sendPolicy per-agent inside broadcast.ts.
     if (
       await maybeBroadcastMessage({
         cfg: params.cfg,
@@ -162,6 +164,20 @@ export function createWebOnMessageHandler(params: {
         processMessage: processForRoute,
       })
     ) {
+      return;
+    }
+
+    // Enforce sendPolicy before dispatching auto-reply.  Without this check
+    // deny rules in session.sendPolicy have no effect on WhatsApp auto-replies
+    // (they were only enforced on the gateway and command paths).
+    const sendPolicy = resolveSendPolicy({
+      cfg: loadConfig(),
+      sessionKey: route.sessionKey,
+      channel: "whatsapp",
+      chatType: msg.chatType === "group" ? "group" : undefined,
+    });
+    if (sendPolicy === "deny") {
+      logVerbose(`Auto-reply blocked by sendPolicy for session ${route.sessionKey}`);
       return;
     }
 
