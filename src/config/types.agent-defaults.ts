@@ -138,6 +138,25 @@ export type AgentDefaultsConfig = {
   bootstrapMaxChars?: number;
   /** Max total chars across all injected bootstrap files (default: 150000). */
   bootstrapTotalMaxChars?: number;
+  /**
+   * Retrieval mode for bootstrap context injection.
+   * - "off": always inject full/truncated bootstrap files
+   * - "auto": retrieve relevant excerpts when total bootstrap chars exceed threshold
+   * - "on": always retrieve relevant excerpts
+   */
+  bootstrapRetrieval?: {
+    mode?: "off" | "auto" | "on";
+    /** Trigger threshold for auto mode (default: 12000). */
+    thresholdChars?: number;
+    /** Max number of files to include in retrieval mode (default: 4). */
+    topFiles?: number;
+    /** Max excerpts per selected file (default: 2). */
+    chunksPerFile?: number;
+    /** Max chars per retrieved excerpt (default: 1200). */
+    maxChunkChars?: number;
+    /** Max total chars across all retrieved excerpts (default: 8000). */
+    maxTotalChars?: number;
+  };
   /** Optional IANA timezone for the user (used in system prompt; defaults to host timezone). */
   userTimezone?: string;
   /** Time format in system prompt: auto (OS preference), 12-hour, or 24-hour. */

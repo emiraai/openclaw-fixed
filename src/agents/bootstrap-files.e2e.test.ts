@@ -53,4 +53,61 @@ describe("resolveBootstrapContextForRun", () => {
 
     expect(extra?.content).toBe("extra");
   });
+
+  it("uses retrieval excerpts when bootstrapRetrieval.mode=on", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-retrieval-");
+    const result = await resolveBootstrapContextForRun({
+      workspaceDir,
+      config: {
+        agents: {
+          defaults: {
+            bootstrapRetrieval: {
+              mode: "on",
+              topFiles: 2,
+              chunksPerFile: 1,
+              maxChunkChars: 400,
+              maxTotalChars: 700,
+            },
+          },
+        },
+      },
+      retrievalPrompt: "sessions_send and message routing behavior",
+    });
+
+    expect(result.contextFiles.length).toBeGreaterThan(0);
+    expect(result.contextFiles.length).toBeLessThanOrEqual(2);
+    const totalChars = result.contextFiles.reduce((sum, file) => sum + file.content.length, 0);
+    expect(totalChars).toBeLessThanOrEqual(700);
+  });
+
+  it("auto mode falls back to full injection when prompt is empty", async () => {
+    const workspaceDir = await makeTempWorkspace("openclaw-bootstrap-auto-");
+    const autoResult = await resolveBootstrapContextForRun({
+      workspaceDir,
+      config: {
+        agents: {
+          defaults: {
+            bootstrapRetrieval: {
+              mode: "auto",
+              thresholdChars: 1,
+            },
+          },
+        },
+      },
+    });
+    const fullResult = await resolveBootstrapContextForRun({
+      workspaceDir,
+      config: {
+        agents: {
+          defaults: {
+            bootstrapRetrieval: {
+              mode: "off",
+            },
+          },
+        },
+      },
+    });
+
+    expect(autoResult.contextFiles).toEqual(fullResult.contextFiles);
+  });
 });

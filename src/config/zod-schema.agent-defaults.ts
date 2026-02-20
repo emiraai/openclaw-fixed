@@ -47,6 +47,17 @@ export const AgentDefaultsSchema = z
     skipBootstrap: z.boolean().optional(),
     bootstrapMaxChars: z.number().int().positive().optional(),
     bootstrapTotalMaxChars: z.number().int().positive().optional(),
+    bootstrapRetrieval: z
+      .object({
+        mode: z.union([z.literal("off"), z.literal("auto"), z.literal("on")]).optional(),
+        thresholdChars: z.number().int().positive().optional(),
+        topFiles: z.number().int().positive().optional(),
+        chunksPerFile: z.number().int().positive().optional(),
+        maxChunkChars: z.number().int().positive().optional(),
+        maxTotalChars: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
     userTimezone: z.string().optional(),
     timeFormat: z.union([z.literal("auto"), z.literal("12"), z.literal("24")]).optional(),
     envelopeTimezone: z.string().optional(),

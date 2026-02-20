@@ -164,6 +164,18 @@ export const FIELD_HELP: Record<string, string> = {
     "Max characters of each workspace bootstrap file injected into the system prompt before truncation (default: 20000).",
   "agents.defaults.bootstrapTotalMaxChars":
     "Max total characters across all injected workspace bootstrap files (default: 150000).",
+  "agents.defaults.bootstrapRetrieval.mode":
+    'Bootstrap context retrieval mode ("off", "auto", or "on"). "auto" retrieves relevant excerpts when bootstrap content is large.',
+  "agents.defaults.bootstrapRetrieval.thresholdChars":
+    "Total bootstrap chars threshold that triggers retrieval mode when mode=auto (default: 12000).",
+  "agents.defaults.bootstrapRetrieval.topFiles":
+    "Max number of bootstrap files to include in retrieval mode (default: 4).",
+  "agents.defaults.bootstrapRetrieval.chunksPerFile":
+    "Max number of retrieved excerpts per selected bootstrap file (default: 2).",
+  "agents.defaults.bootstrapRetrieval.maxChunkChars":
+    "Max chars per retrieved excerpt in bootstrap retrieval mode (default: 1200).",
+  "agents.defaults.bootstrapRetrieval.maxTotalChars":
+    "Max total chars across all retrieved bootstrap excerpts (default: 8000).",
   "agents.defaults.repoRoot":
     "Optional repository root shown in the system prompt runtime line (overrides auto-detect).",
   "agents.defaults.envelopeTimezone":
