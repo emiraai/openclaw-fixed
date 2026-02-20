@@ -36,7 +36,12 @@ export type EmbeddedPiRunMeta = {
   aborted?: boolean;
   systemPromptReport?: SessionSystemPromptReport;
   error?: {
-    kind: "context_overflow" | "compaction_failure" | "role_ordering" | "image_size" | "thinking_immutability";
+    kind:
+      | "context_overflow"
+      | "compaction_failure"
+      | "role_ordering"
+      | "image_size"
+      | "thinking_immutability";
     message: string;
   };
   /** Stop reason for the agent run (e.g., "completed", "tool_calls"). */
