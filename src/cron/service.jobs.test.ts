@@ -159,6 +159,79 @@ describe("applyJobPatch", () => {
     ).not.toThrow();
     expect(job.delivery).toEqual({ mode: "webhook", to: "https://example.invalid/trim" });
   });
+
+  it("rejects Telegram delivery with invalid target (slash delimiter)", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-invalid", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-10012345/6789",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).toThrow(
+      'Invalid Telegram delivery target "-10012345/6789". Use colon (:) as delimiter, not slash or other characters. Valid formats: -1001234567890, -1001234567890:123, -1001234567890:topic:123',
+    );
+  });
+
+  it("rejects Telegram delivery with other invalid characters", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-invalid-space", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-10012345 6789",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).toThrow(
+      'Invalid Telegram delivery target "-10012345 6789". Use colon (:) as delimiter, not slash or other characters. Valid formats: -1001234567890, -1001234567890:123, -1001234567890:topic:123',
+    );
+  });
+
+  it("accepts Telegram delivery with valid target (plain chat id)", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-valid", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-1001234567890",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).not.toThrow();
+  });
+
+  it("accepts Telegram delivery with valid target (colon delimiter)", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-valid-colon", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-1001234567890:123",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).not.toThrow();
+  });
+
+  it("accepts Telegram delivery with valid target (topic marker)", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-valid-topic", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-1001234567890:topic:456",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).not.toThrow();
+  });
+
+  it("accepts Telegram delivery without target", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-no-target", {
+      mode: "announce",
+      channel: "telegram",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).not.toThrow();
+  });
+
+  it("accepts Telegram delivery with @username", () => {
+    const job = createIsolatedAgentTurnJob("job-telegram-username", {
+      mode: "announce",
+      channel: "telegram",
+      to: "@mybot",
+    });
+
+    expect(() => applyJobPatch(job, { enabled: true })).not.toThrow();
+  });
 });
 
 function createMockState(now: number): CronServiceState {

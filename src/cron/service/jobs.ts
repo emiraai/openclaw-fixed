@@ -83,6 +83,19 @@ export function assertSupportedJobSpec(job: Pick<CronJob, "sessionTarget" | "pay
   }
 }
 
+const INVALID_TELEGRAM_TARGET_CHARS = ["/", "\\", " ", ",", ";"];
+
+function validateTelegramDeliveryTarget(to: string | undefined): string | undefined {
+  if (!to) {
+    return undefined;
+  }
+  const hasInvalidChar = INVALID_TELEGRAM_TARGET_CHARS.some((char) => to.includes(char));
+  if (hasInvalidChar) {
+    return `Invalid Telegram delivery target "${to}". Use colon (:) as delimiter, not slash or other characters. Valid formats: -1001234567890, -1001234567890:123, -1001234567890:topic:123`;
+  }
+  return undefined;
+}
+
 function assertDeliverySupport(job: Pick<CronJob, "sessionTarget" | "delivery">) {
   if (!job.delivery) {
     return;
@@ -97,6 +110,12 @@ function assertDeliverySupport(job: Pick<CronJob, "sessionTarget" | "delivery">)
   }
   if (job.sessionTarget !== "isolated") {
     throw new Error('cron channel delivery config is only supported for sessionTarget="isolated"');
+  }
+  if (job.delivery.channel === "telegram") {
+    const telegramError = validateTelegramDeliveryTarget(job.delivery.to);
+    if (telegramError) {
+      throw new Error(telegramError);
+    }
   }
 }
 
