@@ -323,6 +323,7 @@ export function createExecTool(
       }
 
       const baseEnv = coerceEnv(process.env);
+      const defaultsEnv = defaults?.env;
 
       // Logic: Sandbox gets raw env. Host (gateway/node) must pass validation.
       // We validate BEFORE merging to prevent any dangerous vars from entering the stream.
@@ -330,12 +331,13 @@ export function createExecTool(
         validateHostEnv(params.env);
       }
 
-      const mergedEnv = params.env ? { ...baseEnv, ...params.env } : baseEnv;
+      const mergedEnv = { ...baseEnv, ...defaultsEnv, ...params.env };
+      const mergedSandboxEnv = { ...defaultsEnv, ...params.env };
 
       const env = sandbox
         ? buildSandboxEnv({
             defaultPath: DEFAULT_PATH,
-            paramsEnv: params.env,
+            paramsEnv: mergedSandboxEnv,
             sandboxEnv: sandbox.env,
             containerWorkdir: containerWorkdir ?? sandbox.containerWorkdir,
           })
@@ -364,7 +366,7 @@ export function createExecTool(
           command: params.command,
           workdir,
           env,
-          requestedEnv: params.env,
+          requestedEnv: { ...defaultsEnv, ...params.env },
           requestedNode: params.node?.trim(),
           boundNode: defaults?.node?.trim(),
           sessionKey: defaults?.sessionKey,
