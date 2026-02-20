@@ -103,6 +103,12 @@ export type WhatsAppConfig = {
   debounceMs?: number;
   /** Heartbeat visibility settings for this channel. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /**
+   * Optional mapping of E.164 phone numbers to display names.
+   * Overrides WhatsApp push-names in agent context (BodyForAgent / SenderName).
+   * Example: `{ "+15551234567": "Alice Smith" }`
+   */
+  contactNames?: Record<string, string>;
 };
 
 export type WhatsAppAccountConfig = {
@@ -153,4 +159,10 @@ export type WhatsAppAccountConfig = {
   debounceMs?: number;
   /** Heartbeat visibility settings for this account. */
   heartbeat?: ChannelHeartbeatVisibilityConfig;
+  /**
+   * Optional mapping of E.164 phone numbers to display names.
+   * Overrides WhatsApp push-names in agent context (BodyForAgent / SenderName).
+   * Example: `{ "+15551234567": "Alice Smith" }`
+   */
+  contactNames?: Record<string, string>;
 };

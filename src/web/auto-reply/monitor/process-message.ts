@@ -38,6 +38,7 @@ import { maybeSendAckReaction } from "./ack-reaction.js";
 import { formatGroupMembers } from "./group-members.js";
 import { trackBackgroundTask, updateLastRouteInBackground } from "./last-route.js";
 import { buildInboundLine } from "./message-line.js";
+import { resolveDmSenderName } from "./resolve-contact-name.js";
 
 export type GroupHistoryEntry = {
   sender: string;
@@ -284,9 +285,21 @@ export async function processMessage(params: {
         )
       : undefined;
 
+  // Resolve per-account contactNames config (account-level overrides channel-level).
+  const accountContactNames =
+    params.cfg.channels?.whatsapp?.accounts?.[params.route.accountId]?.contactNames;
+  const channelContactNames = params.cfg.channels?.whatsapp?.contactNames;
+  const contactNames = accountContactNames ?? channelContactNames;
+
+  // For direct chats, resolve a display name and prefix BodyForAgent so the LLM
+  // sees who is speaking (e.g. "[Alice]: hello" instead of just "hello").
+  const resolvedSenderName = resolveDmSenderName({ msg: params.msg, contactNames });
+  const bodyForAgent =
+    resolvedSenderName != null ? `[${resolvedSenderName}]: ${params.msg.body}` : params.msg.body;
+
   const ctxPayload = finalizeInboundContext({
     Body: combinedBody,
-    BodyForAgent: params.msg.body,
+    BodyForAgent: bodyForAgent,
     InboundHistory: inboundHistory,
     RawBody: params.msg.body,
     CommandBody: params.msg.body,
@@ -309,7 +322,7 @@ export async function processMessage(params: {
       roster: params.groupMemberNames.get(params.groupHistoryKey),
       fallbackE164: params.msg.senderE164,
     }),
-    SenderName: params.msg.senderName,
+    SenderName: resolvedSenderName ?? params.msg.senderName,
     SenderId: params.msg.senderJid?.trim() || params.msg.senderE164,
     SenderE164: params.msg.senderE164,
     CommandAuthorized: commandAuthorized,

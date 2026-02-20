@@ -55,6 +55,7 @@ const WhatsAppSharedSchema = z.object({
   ackReaction: WhatsAppAckReactionSchema,
   debounceMs: z.number().int().nonnegative().optional().default(0),
   heartbeat: ChannelHeartbeatVisibilitySchema,
+  contactNames: z.record(z.string(), z.string()).optional(),
 });
 
 function enforceOpenDmPolicyAllowFromStar(params: {
