@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "workspaces": {
     ".": {
-      "ignoreDependencies": ["signal-utils"]
+      "ignoreDependencies": ["signal-utils", "long"]
     }
   }
 }
