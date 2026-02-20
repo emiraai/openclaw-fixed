@@ -212,6 +212,21 @@ function isSafeRelativePath(relPath: string) {
   return true;
 }
 
+function resolveIfContainedByRealRoot(root: string, candidatePath: string): string | null {
+  const resolvedCandidate = path.resolve(candidatePath);
+  if (!isWithinDir(root, resolvedCandidate)) {
+    return null;
+  }
+
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realCandidate = fs.realpathSync(resolvedCandidate);
+    return isWithinDir(realRoot, realCandidate) ? realCandidate : null;
+  } catch {
+    return null;
+  }
+}
+
 export function handleControlUiHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -339,17 +354,13 @@ export function handleControlUiHttpRequest(
   }
 
   const filePath = path.resolve(root, fileRel);
-  if (!isWithinDir(root, filePath)) {
-    respondNotFound(res);
-    return true;
-  }
-
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    if (path.basename(filePath) === "index.html") {
-      serveIndexHtml(res, filePath);
+  const safeFilePath = resolveIfContainedByRealRoot(root, filePath);
+  if (safeFilePath && fs.existsSync(safeFilePath) && fs.statSync(safeFilePath).isFile()) {
+    if (path.basename(safeFilePath) === "index.html") {
+      serveIndexHtml(res, safeFilePath);
       return true;
     }
-    serveFile(res, filePath);
+    serveFile(res, safeFilePath);
     return true;
   }
 
@@ -364,8 +375,8 @@ export function handleControlUiHttpRequest(
   }
 
   // SPA fallback (client-side router): serve index.html for unknown paths.
-  const indexPath = path.join(root, "index.html");
-  if (fs.existsSync(indexPath)) {
+  const indexPath = resolveIfContainedByRealRoot(root, path.join(root, "index.html"));
+  if (indexPath && fs.existsSync(indexPath)) {
     serveIndexHtml(res, indexPath);
     return true;
   }
