@@ -152,6 +152,7 @@ export function createFollowupRunner(params: {
               senderUsername: queued.run.senderUsername,
               senderE164: queued.run.senderE164,
               sessionFile: queued.run.sessionFile,
+              agentDir: queued.run.agentDir,
               workspaceDir: queued.run.workspaceDir,
               config: queued.run.config,
               skillsSnapshot: queued.run.skillsSnapshot,
