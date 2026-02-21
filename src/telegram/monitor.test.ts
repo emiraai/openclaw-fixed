@@ -243,4 +243,33 @@ describe("monitorTelegramProvider (grammY)", () => {
     );
     expect(runSpy).not.toHaveBeenCalled();
   });
+
+  it("webhook mode waits for abort signal before returning", async () => {
+    const abort = new AbortController();
+    let monitorResolved = false;
+
+    const monitorPromise = monitorTelegramProvider({
+      token: "tok",
+      useWebhook: true,
+      webhookUrl: "https://example.test/telegram",
+      webhookSecret: "secret",
+      abortSignal: abort.signal,
+    }).then(() => {
+      monitorResolved = true;
+    });
+
+    // Give it a tick to start
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Monitor should still be running
+    expect(monitorResolved).toBe(false);
+    expect(startTelegramWebhookSpy).toHaveBeenCalled();
+
+    // Trigger abort
+    abort.abort();
+
+    // Now it should resolve
+    await monitorPromise;
+    expect(monitorResolved).toBe(true);
+  });
 });

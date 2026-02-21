@@ -1,12 +1,12 @@
 import { type RunOptions, run } from "@grammyjs/runner";
-import { resolveAgentMaxConcurrent } from "../config/agent-limits.js";
 import type { OpenClawConfig } from "../config/config.js";
+import type { RuntimeEnv } from "../runtime.js";
+import { resolveAgentMaxConcurrent } from "../config/agent-limits.js";
 import { loadConfig } from "../config/config.js";
 import { computeBackoff, sleepWithAbort } from "../infra/backoff.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { formatDurationPrecise } from "../infra/format-time/format-duration.ts";
 import { registerUnhandledRejectionHandler } from "../infra/unhandled-rejections.js";
-import type { RuntimeEnv } from "../runtime.js";
 import { resolveTelegramAccount } from "./accounts.js";
 import { resolveTelegramAllowedUpdates } from "./allowed-updates.js";
 import { createTelegramBot } from "./bot.js";
@@ -165,6 +165,13 @@ export async function monitorTelegramProvider(opts: MonitorTelegramOpts = {}) {
         abortSignal: opts.abortSignal,
         publicUrl: opts.webhookUrl,
       });
+
+      // Wait for abort signal to keep the monitor running
+      if (opts.abortSignal && !opts.abortSignal.aborted) {
+        await new Promise<void>((resolve) => {
+          opts.abortSignal!.addEventListener("abort", () => resolve(), { once: true });
+        });
+      }
       return;
     }
 
