@@ -1,5 +1,6 @@
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { DiscordActionConfig } from "../../config/config.js";
+import type { DiscordActionConfig, OpenClawConfig } from "../../config/config.js";
+import type { DiscordSendComponents, DiscordSendEmbeds } from "../../discord/send.shared.js";
 import { readDiscordComponentSpec } from "../../discord/components.js";
 import {
   createThreadDiscord,
@@ -23,8 +24,8 @@ import {
   sendVoiceMessageDiscord,
   unpinMessageDiscord,
 } from "../../discord/send.js";
-import type { DiscordSendComponents, DiscordSendEmbeds } from "../../discord/send.shared.js";
 import { resolveDiscordChannelId } from "../../discord/targets.js";
+import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { withNormalizedTimestamp } from "../date-time.js";
 import { assertMediaNotDataUrl } from "../sandbox-paths.js";
 import {
@@ -56,6 +57,7 @@ export async function handleDiscordMessagingAction(
   action: string,
   params: Record<string, unknown>,
   isActionEnabled: ActionGate<DiscordActionConfig>,
+  cfg?: OpenClawConfig,
 ): Promise<AgentToolResult<unknown>> {
   const resolveChannelId = () =>
     resolveDiscordChannelId(
@@ -305,9 +307,13 @@ export async function handleDiscordMessagingAction(
         return jsonResult({ ok: true, result, voiceMessage: true });
       }
 
+      const mediaLocalRoots = cfg
+        ? getAgentScopedMediaLocalRoots(cfg, agentId ?? undefined)
+        : undefined;
       const result = await sendMessageDiscord(to, content ?? "", {
         ...(accountId ? { accountId } : {}),
         mediaUrl,
+        mediaLocalRoots,
         replyTo,
         components,
         embeds,
