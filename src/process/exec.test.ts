@@ -118,6 +118,8 @@ describe("runCommandWithTimeout Corepack prompt suppression", () => {
 
   for (const manager of ["pnpm", "yarn", "bun"]) {
     it(`sets COREPACK_ENABLE_DOWNLOAD_PROMPT=0 when running ${manager}`, async () => {
+      const envSnapshot = captureEnv(["COREPACK_ENABLE_DOWNLOAD_PROMPT"]);
+      delete process.env.COREPACK_ENABLE_DOWNLOAD_PROMPT;
       const dir = mkdtempSync(join(tmpdir(), "exec-corepack-test-"));
       try {
         const command = createFakePackageManager(dir, manager);
@@ -128,6 +130,7 @@ describe("runCommandWithTimeout Corepack prompt suppression", () => {
         expect(result.stdout).toBe("0");
       } finally {
         rmSync(dir, { recursive: true, force: true });
+        envSnapshot.restore();
       }
     });
   }
