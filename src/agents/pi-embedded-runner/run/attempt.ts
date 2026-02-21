@@ -83,7 +83,7 @@ import {
   sanitizeSessionHistory,
   sanitizeToolsForGoogle,
 } from "../google.js";
-import { getDmHistoryLimitFromSessionKey, limitHistoryTurns } from "../history.js";
+import { getHistoryLimitFromSessionKey, limitHistoryTurns } from "../history.js";
 import { log } from "../logger.js";
 import { buildModelAliasLines } from "../model.js";
 import {
@@ -725,10 +725,10 @@ export async function runEmbeddedAttempt(
         const validated = transcriptPolicy.validateAnthropicTurns
           ? validateAnthropicTurns(validatedGemini)
           : validatedGemini;
-        const truncated = limitHistoryTurns(
-          validated,
-          getDmHistoryLimitFromSessionKey(params.sessionKey, params.config),
-        );
+        const resolvedHistoryLimit =
+          params.historyTurnLimit ??
+          getHistoryLimitFromSessionKey(params.sessionKey, params.config);
+        const truncated = limitHistoryTurns(validated, resolvedHistoryLimit);
         // Re-run tool_use/tool_result pairing repair after truncation, since
         // limitHistoryTurns can orphan tool_result blocks by removing the
         // assistant message that contained the matching tool_use.
@@ -736,9 +736,7 @@ export async function runEmbeddedAttempt(
           ? sanitizeToolUseResultPairing(truncated)
           : truncated;
         cacheTrace?.recordStage("session:limited", { messages: limited });
-        if (limited.length > 0) {
-          activeSession.agent.replaceMessages(limited);
-        }
+        activeSession.agent.replaceMessages(limited);
       } catch (err) {
         await flushPendingToolResultsAfterIdle({
           agent: activeSession?.agent,
