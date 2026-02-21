@@ -242,11 +242,7 @@ describe("msteams messenger", () => {
         } else {
           process.env.OPENCLAW_STATE_DIR = previousStateDir;
         }
-<<<<<<< HEAD
-        await rm(tmpStateDir, { recursive: true, force: true });
-=======
         await rm(stateDir, { recursive: true, force: true });
->>>>>>> f09ea557a (Tests: use allowed local root in msteams media mention fixture)
       }
     });
 
