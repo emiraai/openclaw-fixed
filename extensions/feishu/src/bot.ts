@@ -542,7 +542,7 @@ export async function handleFeishuMessage(params: {
   }
 
   log(
-    `feishu[${account.accountId}]: received message from ${ctx.senderOpenId} in ${ctx.chatId} (${ctx.chatType})`,
+    `feishu[${account.accountId}]: received message from ${ctx.senderOpenId} in ${ctx.chatId} (${ctx.chatType}) rootId=${ctx.rootId ?? "null"} msgId=${ctx.messageId}`,
   );
 
   // Log mention targets if detected
@@ -858,7 +858,7 @@ export async function handleFeishuMessage(params: {
         agentId: route.agentId,
         runtime: runtime as RuntimeEnv,
         chatId: ctx.chatId,
-        replyToMessageId: ctx.messageId,
+        replyToMessageId: ctx.rootId ?? ctx.messageId,
         accountId: account.accountId,
       });
 
@@ -929,6 +929,7 @@ export async function handleFeishuMessage(params: {
       Provider: "feishu" as const,
       Surface: "feishu" as const,
       MessageSid: ctx.messageId,
+      MessageThreadId: ctx.rootId ?? undefined,
       ReplyToBody: quotedContent ?? undefined,
       Timestamp: Date.now(),
       WasMentioned: ctx.mentionedBot,
@@ -943,7 +944,7 @@ export async function handleFeishuMessage(params: {
       agentId: route.agentId,
       runtime: runtime as RuntimeEnv,
       chatId: ctx.chatId,
-      replyToMessageId: ctx.messageId,
+      replyToMessageId: ctx.rootId ?? ctx.messageId,
       mentionTargets: ctx.mentionTargets,
       accountId: account.accountId,
     });
