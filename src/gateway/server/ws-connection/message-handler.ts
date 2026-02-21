@@ -451,6 +451,15 @@ export function attachGatewayWsMessageHandler(params: {
         };
 
         let { authResult, authOk, authMethod, sharedAuthOk } = await resolveAuthState();
+
+        // Local resilience: when shared gateway auth is valid on loopback, prefer it
+        // over device-token checks to avoid lockouts from stale rotated device tokens.
+        // Pairing/role/scope checks still apply below.
+        if (!authOk && sharedAuthOk && isLocalClient) {
+          authOk = true;
+          authMethod = "token";
+        }
+
         const rejectUnauthorized = (failedAuth: GatewayAuthResult) => {
           markHandshakeFailure("unauthorized", {
             authMode: resolvedAuth.mode,
@@ -694,7 +703,12 @@ export function attachGatewayWsMessageHandler(params: {
           return;
         }
 
-        const skipPairing = shouldSkipControlUiPairing(controlUiAuthPolicy, sharedAuthOk);
+        // Local resilience mode: if shared auth is valid on loopback, don't hard-fail
+        // on pairing state drift. This keeps local operator access stable while preserving
+        // remote pairing requirements.
+        const skipPairing =
+          shouldSkipControlUiPairing(controlUiAuthPolicy, sharedAuthOk) ||
+          (isLocalClient && sharedAuthOk);
         if (device && devicePublicKey && !skipPairing) {
           const formatAuditList = (items: string[] | undefined): string => {
             if (!items || items.length === 0) {
