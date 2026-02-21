@@ -335,6 +335,61 @@ export async function handleTelegramAction(
     });
   }
 
+  if (action === "sendPoll") {
+    if (!isActionEnabled("polls")) {
+      throw new Error("Telegram polls are disabled. Set channels.telegram.actions.polls to true.");
+    }
+    const to = readStringParam(params, "to", { required: true });
+    const question = readStringParam(params, "question", { required: true });
+    const options = params.options;
+    if (!Array.isArray(options)) {
+      throw new Error("Poll options must be an array of strings.");
+    }
+    const pollOptions = options
+      .map((opt) => (typeof opt === "string" ? opt.trim() : ""))
+      .filter(Boolean);
+    if (pollOptions.length < 2) {
+      throw new Error("Poll requires at least 2 options.");
+    }
+    const maxSelections =
+      typeof params.allowMultiselect === "boolean" && params.allowMultiselect
+        ? pollOptions.length
+        : 1;
+    const durationHours = readNumberParam(params, "durationHours", { integer: true });
+    const messageThreadId = readNumberParam(params, "messageThreadId", { integer: true });
+    const silent = typeof params.silent === "boolean" ? params.silent : undefined;
+    const isAnonymous = typeof params.isAnonymous === "boolean" ? params.isAnonymous : undefined;
+    const token = resolveTelegramToken(cfg, { accountId }).token;
+    if (!token) {
+      throw new Error(
+        "Telegram bot token missing. Set TELEGRAM_BOT_TOKEN or channels.telegram.botToken.",
+      );
+    }
+    const { sendPollTelegram } = await import("../../telegram/send.js");
+    const result = await sendPollTelegram(
+      to,
+      {
+        question,
+        options: pollOptions,
+        maxSelections,
+        durationHours: durationHours ?? undefined,
+      },
+      {
+        token,
+        accountId: accountId ?? undefined,
+        messageThreadId: messageThreadId ?? undefined,
+        silent,
+        isAnonymous,
+      },
+    );
+    return jsonResult({
+      ok: true,
+      messageId: result.messageId,
+      chatId: result.chatId,
+      pollId: result.pollId,
+    });
+  }
+
   if (action === "stickerCacheStats") {
     const stats = getCacheStats();
     return jsonResult({ ok: true, ...stats });

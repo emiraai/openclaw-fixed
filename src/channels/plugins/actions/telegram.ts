@@ -65,6 +65,9 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
     if (gate("editMessage")) {
       actions.add("edit");
     }
+    if (gate("polls")) {
+      actions.add("poll");
+    }
     if (gate("sticker", false)) {
       actions.add("sticker");
       actions.add("sticker-search");
@@ -161,6 +164,33 @@ export const telegramMessageActions: ChannelMessageActionAdapter = {
           messageId,
           content: message,
           buttons,
+          accountId: accountId ?? undefined,
+        },
+        cfg,
+      );
+    }
+
+    if (action === "poll") {
+      const to =
+        readStringParam(params, "to") ?? readStringParam(params, "target", { required: true });
+      const question = readStringParam(params, "pollQuestion", { required: true });
+      const options = readStringArrayParam(params, "pollOption", { required: true }) ?? [];
+      const allowMultiselect = typeof params.pollMulti === "boolean" ? params.pollMulti : undefined;
+      const durationHours = readNumberParam(params, "pollDurationHours", { integer: true });
+      const threadId = readNumberParam(params, "threadId", { integer: true });
+      const silent = typeof params.silent === "boolean" ? params.silent : undefined;
+      const isAnonymous = typeof params.isAnonymous === "boolean" ? params.isAnonymous : undefined;
+      return await handleTelegramAction(
+        {
+          action: "sendPoll",
+          to,
+          question,
+          options,
+          allowMultiselect,
+          durationHours: durationHours ?? undefined,
+          messageThreadId: threadId ?? undefined,
+          silent,
+          isAnonymous,
           accountId: accountId ?? undefined,
         },
         cfg,
