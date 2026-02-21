@@ -31,6 +31,15 @@ export async function syncSessionFiles(params: {
 }) {
   const files = await listSessionFilesForAgent(params.agentId);
   const activePaths = new Set(files.map((file) => sessionPathForFile(file)));
+  const knownPaths = params.needsFullReindex
+    ? new Set<string>()
+    : new Set(
+        (
+          params.db.prepare(`SELECT path FROM files WHERE source = ?`).all("sessions") as Array<{
+            path: string;
+          }>
+        ).map((row) => row.path),
+      );
   const indexAll = params.needsFullReindex || params.dirtyFiles.size === 0;
 
   log.debug("memory sync: indexing session files", {
@@ -48,7 +57,9 @@ export async function syncSessionFiles(params: {
   );
 
   const tasks = files.map((absPath) => async () => {
-    if (!indexAll && !params.dirtyFiles.has(absPath)) {
+    const sessionPath = sessionPathForFile(absPath);
+    const isKnownPath = knownPaths.has(sessionPath);
+    if (!indexAll && !params.dirtyFiles.has(absPath) && isKnownPath) {
       bumpSyncProgressCompleted(params.progress);
       return;
     }
