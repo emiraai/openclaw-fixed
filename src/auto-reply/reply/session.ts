@@ -32,6 +32,7 @@ import { normalizeMainKey } from "../../routing/session-key.js";
 import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
 import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
+import { resolveResponseUsageMode } from "../thinking.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 
@@ -144,6 +145,7 @@ export async function initSessionState(params: {
   let persistedVerbose: string | undefined;
   let persistedReasoning: string | undefined;
   let persistedTtsAuto: TtsAutoMode | undefined;
+  let persistedResponseUsage: "off" | "tokens" | "full" | undefined;
   let persistedModelOverride: string | undefined;
   let persistedProviderOverride: string | undefined;
 
@@ -256,6 +258,7 @@ export async function initSessionState(params: {
       persistedVerbose = entry.verboseLevel;
       persistedReasoning = entry.reasoningLevel;
       persistedTtsAuto = entry.ttsAuto;
+      persistedResponseUsage = resolveResponseUsageMode(entry.responseUsage);
       persistedModelOverride = entry.modelOverride;
       persistedProviderOverride = entry.providerOverride;
     }
@@ -282,6 +285,7 @@ export async function initSessionState(params: {
   const lastTo = deliveryFields.lastTo ?? lastToRaw;
   const lastAccountId = deliveryFields.lastAccountId ?? lastAccountIdRaw;
   const lastThreadId = deliveryFields.lastThreadId ?? lastThreadIdRaw;
+  const defaultUsage = isNewSession ? cfg.agents?.defaults?.usage : undefined;
   sessionEntry = {
     ...baseEntry,
     sessionId,
@@ -293,7 +297,10 @@ export async function initSessionState(params: {
     verboseLevel: persistedVerbose ?? baseEntry?.verboseLevel,
     reasoningLevel: persistedReasoning ?? baseEntry?.reasoningLevel,
     ttsAuto: persistedTtsAuto ?? baseEntry?.ttsAuto,
-    responseUsage: baseEntry?.responseUsage,
+    responseUsage:
+      isNewSession || persistedResponseUsage
+        ? (persistedResponseUsage ?? baseEntry?.responseUsage ?? defaultUsage)
+        : baseEntry?.responseUsage,
     modelOverride: persistedModelOverride ?? baseEntry?.modelOverride,
     providerOverride: persistedProviderOverride ?? baseEntry?.providerOverride,
     sendPolicy: baseEntry?.sendPolicy,
