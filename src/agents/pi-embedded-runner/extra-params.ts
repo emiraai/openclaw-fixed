@@ -241,7 +241,7 @@ const PI_AI_OAUTH_ANTHROPIC_BETAS = [
 ] as const;
 
 function isAnthropicOAuthApiKey(apiKey: unknown): boolean {
-  return typeof apiKey === "string" && apiKey.includes("sk-ant-oat");
+  return typeof apiKey === "string" && apiKey.startsWith("sk-ant-oat");
 }
 
 function createAnthropicBetaHeadersWrapper(

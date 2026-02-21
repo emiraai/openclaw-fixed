@@ -645,9 +645,22 @@ export async function runEmbeddedAttempt(
         workspaceDir: params.workspaceDir,
       });
 
+      // Anthropic native SDK: bypass pi-ai's streamSimple for direct @anthropic-ai/sdk
+      // calls. Removes 300s timeout, enables prompt caching and extended thinking.
+      // Auth comes through options.apiKey (from authStorage, same as streamSimple).
+      // See: https://github.com/openclaw/openclaw/issues/19534
+      if (params.model.api === "anthropic-native") {
+        const { createAnthropicNativeStreamFn } = await import("../../anthropic-native-stream.js");
+        const fallbackApiKey = process.env.ANTHROPIC_API_KEY || "";
+        const baseUrl =
+          typeof params.model.baseUrl === "string" ? params.model.baseUrl.trim() : undefined;
+        activeSession.agent.streamFn = createAnthropicNativeStreamFn(fallbackApiKey, {
+          baseUrl: baseUrl || undefined,
+        });
+      }
       // Ollama native API: bypass SDK's streamSimple and use direct /api/chat calls
       // for reliable streaming + tool calling support (#11828).
-      if (params.model.api === "ollama") {
+      else if (params.model.api === "ollama") {
         // Use the resolved model baseUrl first so custom provider aliases work.
         const providerConfig = params.config?.models?.providers?.[params.model.provider];
         const modelBaseUrl =

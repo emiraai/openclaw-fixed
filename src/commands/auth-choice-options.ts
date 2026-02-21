@@ -31,8 +31,8 @@ const AUTH_CHOICE_GROUP_DEFS: {
   {
     value: "anthropic",
     label: "Anthropic",
-    hint: "setup-token + API key",
-    choices: ["token", "apiKey"],
+    hint: "setup-token + API key + Agent SDK",
+    choices: ["token", "apiKey", "claude-agent-sdk"],
   },
   {
     value: "chutes",
@@ -294,6 +294,11 @@ const BASE_AUTH_CHOICE_OPTIONS: ReadonlyArray<AuthChoiceOption> = [
     hint: "Local proxy for VS Code Copilot models",
   },
   { value: "apiKey", label: "Anthropic API key" },
+  {
+    value: "claude-agent-sdk",
+    label: "Claude CLI (personal use)",
+    hint: "Spawns claude CLI — personal/local only (policy: code.claude.com/docs/en/legal-and-compliance)",
+  },
   {
     value: "opencode-zen",
     label: "OpenCode Zen (multi-model proxy)",

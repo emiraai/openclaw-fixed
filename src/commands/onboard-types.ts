@@ -49,6 +49,7 @@ export type AuthChoice =
   | "byteplus-api-key"
   | "qianfan-api-key"
   | "custom-api-key"
+  | "claude-agent-sdk"
   | "skip";
 export type AuthChoiceGroupId =
   | "openai"

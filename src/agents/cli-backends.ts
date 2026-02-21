@@ -64,6 +64,37 @@ const DEFAULT_CLAUDE_BACKEND: CliBackendConfig = {
   serialize: true,
 };
 
+const DEFAULT_AGENT_SDK_BACKEND: CliBackendConfig = {
+  command: "claude",
+  args: ["-p", "--output-format", "stream-json", "--dangerously-skip-permissions"],
+  resumeArgs: [
+    "-p",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions",
+    "--resume",
+    "{sessionId}",
+  ],
+  output: "jsonl",
+  input: "arg",
+  modelArg: "--model",
+  modelAliases: CLAUDE_MODEL_ALIASES,
+  sessionArg: "--session-id",
+  sessionMode: "always",
+  sessionIdFields: ["session_id", "sessionId", "conversation_id", "conversationId"],
+  systemPromptArg: "--append-system-prompt",
+  systemPromptMode: "append",
+  systemPromptWhen: "first",
+  clearEnv: ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY_OLD"],
+  reliability: {
+    watchdog: {
+      fresh: { ...CLI_FRESH_WATCHDOG_DEFAULTS },
+      resume: { ...CLI_RESUME_WATCHDOG_DEFAULTS },
+    },
+  },
+  serialize: true,
+};
+
 const DEFAULT_CODEX_BACKEND: CliBackendConfig = {
   command: "codex",
   args: ["exec", "--json", "--color", "never", "--sandbox", "read-only", "--skip-git-repo-check"],
@@ -150,6 +181,7 @@ function mergeBackendConfig(base: CliBackendConfig, override?: CliBackendConfig)
 export function resolveCliBackendIds(cfg?: OpenClawConfig): Set<string> {
   const ids = new Set<string>([
     normalizeBackendKey("claude-cli"),
+    normalizeBackendKey("claude-agent-sdk"),
     normalizeBackendKey("codex-cli"),
   ]);
   const configured = cfg?.agents?.defaults?.cliBackends ?? {};
@@ -169,6 +201,14 @@ export function resolveCliBackendConfig(
 
   if (normalized === "claude-cli") {
     const merged = mergeBackendConfig(DEFAULT_CLAUDE_BACKEND, override);
+    const command = merged.command?.trim();
+    if (!command) {
+      return null;
+    }
+    return { id: normalized, config: { ...merged, command } };
+  }
+  if (normalized === "claude-agent-sdk") {
+    const merged = mergeBackendConfig(DEFAULT_AGENT_SDK_BACKEND, override);
     const command = merged.command?.trim();
     if (!command) {
       return null;
