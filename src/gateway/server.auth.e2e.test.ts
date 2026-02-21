@@ -772,7 +772,13 @@ describe("gateway server auth/connect", () => {
         const challenge = await challengePromise;
         const nonce = (challenge.payload as { nonce?: unknown } | undefined)?.nonce;
         expect(typeof nonce).toBe("string");
-        const scopes = ["operator.admin", "operator.approvals", "operator.pairing"];
+        const scopes = [
+          "operator.admin",
+          "operator.read",
+          "operator.write",
+          "operator.approvals",
+          "operator.pairing",
+        ];
         const { device } = await createSignedDevice({
           token: "secret",
           scopes,
