@@ -53,6 +53,18 @@ curl -fsSL "$INSTALL_URL" | bash
 echo "==> Verify installed version"
 CLI_NAME="$PACKAGE_NAME"
 if ! command -v "$CLI_NAME" >/dev/null 2>&1; then
+  NPM_PREFIX="$(npm config get prefix 2>/dev/null || true)"
+  NPM_PREFIX="${NPM_PREFIX//$'\r'/}"
+  NPM_GLOBAL_BIN=""
+  if [[ -n "$NPM_PREFIX" && "$NPM_PREFIX" != "undefined" ]]; then
+    NPM_GLOBAL_BIN="${NPM_PREFIX%/}/bin"
+  fi
+
+  if [[ -n "$NPM_GLOBAL_BIN" && -x "$NPM_GLOBAL_BIN/$CLI_NAME" ]]; then
+    export PATH="$NPM_GLOBAL_BIN:$PATH"
+  fi
+fi
+if ! command -v "$CLI_NAME" >/dev/null 2>&1; then
   echo "ERROR: $PACKAGE_NAME is not on PATH" >&2
   exit 1
 fi
