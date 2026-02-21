@@ -115,12 +115,17 @@ export function resolveTranscriptPolicy(params: {
     : undefined;
   const sanitizeThinkingSignatures = isAntigravityClaudeModel;
 
+  // Anthropic (including Bedrock) requires thinking.signature to be preserved
+  // when Extended Thinking is enabled. Without it, API returns:
+  // "messages.X.content.Y.thinking.signature: Field required"
+  const preserveSignatures = isAntigravityClaudeModel || isAnthropic;
+
   return {
     sanitizeMode: isOpenAi ? "images-only" : needsNonImageSanitize ? "full" : "images-only",
     sanitizeToolCallIds: !isOpenAi && sanitizeToolCallIds,
     toolCallIdMode,
     repairToolUseResultPairing: !isOpenAi && repairToolUseResultPairing,
-    preserveSignatures: isAntigravityClaudeModel,
+    preserveSignatures,
     sanitizeThoughtSignatures: isOpenAi ? undefined : sanitizeThoughtSignatures,
     sanitizeThinkingSignatures,
     dropThinkingBlocks,
