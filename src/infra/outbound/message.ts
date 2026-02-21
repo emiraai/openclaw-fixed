@@ -54,6 +54,8 @@ type MessageSendParams = {
   };
   abortSignal?: AbortSignal;
   silent?: boolean;
+  /** Override link preview per-message (Telegram only). */
+  linkPreview?: boolean;
 };
 
 export type MessageSendResult = {
@@ -222,6 +224,7 @@ export async function sendMessage(params: MessageSendParams): Promise<MessageSen
       bestEffort: params.bestEffort,
       abortSignal: params.abortSignal,
       silent: params.silent,
+      linkPreview: params.linkPreview,
       mirror: params.mirror
         ? {
             ...params.mirror,
@@ -252,6 +255,7 @@ export async function sendMessage(params: MessageSendParams): Promise<MessageSen
       gifPlayback: params.gifPlayback,
       accountId: params.accountId,
       channel,
+      linkPreview: params.linkPreview,
       sessionKey: params.mirror?.sessionKey,
       idempotencyKey: params.idempotencyKey ?? randomIdempotencyKey(),
     },

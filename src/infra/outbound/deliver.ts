@@ -114,6 +114,7 @@ type ChannelHandlerParams = {
   gifPlayback?: boolean;
   silent?: boolean;
   mediaLocalRoots?: readonly string[];
+  linkPreview?: boolean;
 };
 
 // Channel docking: outbound delivery delegates to plugin.outbound adapters.
@@ -187,6 +188,7 @@ function createChannelOutboundContextBase(
     deps: params.deps,
     silent: params.silent,
     mediaLocalRoots: params.mediaLocalRoots,
+    linkPreview: params.linkPreview,
   };
 }
 
@@ -216,6 +218,8 @@ type DeliverOutboundPayloadsCoreParams = {
     mediaUrls?: string[];
   };
   silent?: boolean;
+  /** Override link preview per-message (Telegram only). */
+  linkPreview?: boolean;
 };
 
 type DeliverOutboundPayloadsParams = DeliverOutboundPayloadsCoreParams & {
@@ -309,6 +313,7 @@ async function deliverOutboundPayloadsCore(
     gifPlayback: params.gifPlayback,
     silent: params.silent,
     mediaLocalRoots,
+    linkPreview: params.linkPreview,
   });
   const textLimit = handler.chunker
     ? resolveTextChunkLimit(cfg, channel, accountId, {

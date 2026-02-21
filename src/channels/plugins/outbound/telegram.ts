@@ -12,7 +12,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
   chunker: markdownToTelegramHtmlChunks,
   chunkerMode: "markdown",
   textChunkLimit: 4000,
-  sendText: async ({ to, text, accountId, deps, replyToId, threadId }) => {
+  sendText: async ({ to, text, accountId, deps, replyToId, threadId, linkPreview }) => {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
     const messageThreadId = parseTelegramThreadId(threadId);
@@ -22,6 +22,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       messageThreadId,
       replyToMessageId,
       accountId: accountId ?? undefined,
+      linkPreview,
     });
     return { channel: "telegram", ...result };
   },
@@ -34,6 +35,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     deps,
     replyToId,
     threadId,
+    linkPreview,
   }) => {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
@@ -46,10 +48,11 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       replyToMessageId,
       accountId: accountId ?? undefined,
       mediaLocalRoots,
+      linkPreview,
     });
     return { channel: "telegram", ...result };
   },
-  sendPayload: async ({ to, payload, mediaLocalRoots, accountId, deps, replyToId, threadId }) => {
+  sendPayload: async ({ to, payload, mediaLocalRoots, accountId, deps, replyToId, threadId, linkPreview }) => {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
     const messageThreadId = parseTelegramThreadId(threadId);
@@ -72,6 +75,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       quoteText,
       accountId: accountId ?? undefined,
       mediaLocalRoots,
+      linkPreview,
     };
 
     if (mediaUrls.length === 0) {

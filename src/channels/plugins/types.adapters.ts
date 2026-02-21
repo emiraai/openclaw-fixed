@@ -88,6 +88,8 @@ export type ChannelOutboundContext = {
   identity?: OutboundIdentity;
   deps?: OutboundSendDeps;
   silent?: boolean;
+  /** Override link preview per-message (Telegram only). */
+  linkPreview?: boolean;
 };
 
 export type ChannelOutboundPayloadContext = ChannelOutboundContext & {

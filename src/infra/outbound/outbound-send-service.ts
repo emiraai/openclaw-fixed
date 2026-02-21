@@ -83,6 +83,7 @@ export async function executeSendAction(params: {
   mediaUrls?: string[];
   gifPlayback?: boolean;
   bestEffort?: boolean;
+  linkPreview?: boolean;
   replyToId?: string;
   threadId?: string | number;
 }): Promise<{
@@ -129,6 +130,7 @@ export async function executeSendAction(params: {
     replyToId: params.replyToId,
     threadId: params.threadId,
     gifPlayback: params.gifPlayback,
+    linkPreview: params.linkPreview,
     dryRun: params.ctx.dryRun,
     bestEffort: params.bestEffort ?? undefined,
     deps: params.ctx.deps,
