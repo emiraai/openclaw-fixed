@@ -82,6 +82,10 @@ export function createGatewayHooksRequestHandler(params: {
           message: value.message,
           sessionKey,
           lane: "cron",
+          // SECURITY: This turn originates from an external HTTP hook. Pass the
+          // dispatch-origin flag explicitly so that security wrapping is applied
+          // regardless of the session key format (see run.ts for full rationale).
+          fromExternalHook: true,
         });
         const summary = result.summary?.trim() || result.error?.trim() || result.status;
         const prefix =

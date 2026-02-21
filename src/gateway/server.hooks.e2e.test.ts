@@ -56,6 +56,12 @@ describe("gateway server hooks", () => {
       expect(resAgent.status).toBe(202);
       const agentEvents = await waitForSystemEvent();
       expect(agentEvents.some((e) => e.includes("Hook Email: done"))).toBe(true);
+      // SECURITY: Verify fromExternalHook=true is passed so the security wrapper is applied
+      // regardless of session key format (prevents session key spoofing bypass).
+      const agentCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as {
+        fromExternalHook?: boolean;
+      };
+      expect(agentCall?.fromExternalHook).toBe(true);
       drainSystemEvents(resolveMainKey());
 
       cronIsolatedRun.mockReset();

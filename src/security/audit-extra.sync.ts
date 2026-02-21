@@ -487,9 +487,13 @@ export function collectHooksHardeningFindings(
       severity: remoteExposure ? "critical" : "warn",
       title: "External hook payloads may override sessionKey",
       detail:
-        "hooks.allowRequestSessionKey=true allows `/hooks/agent` callers to choose the session key. Treat hook token holders as full-trust unless you also restrict prefixes.",
+        "hooks.allowRequestSessionKey=true allows `/hooks/agent` callers to choose the session key. " +
+        "Any hook token holder can target arbitrary session namespaces, enabling session-hijacking and " +
+        "prompt injection via session key format spoofing (supplying a key that does not start with 'hook:' " +
+        "to bypass external content security wrapping unless dispatch-origin flags are enforced). " +
+        "Treat hook token holders as full-trust unless you also restrict prefixes.",
       remediation:
-        "Set hooks.allowRequestSessionKey=false (recommended) or constrain hooks.allowedSessionKeyPrefixes.",
+        "Set hooks.allowRequestSessionKey=false (recommended) or constrain hooks.allowedSessionKeyPrefixes to 'hook:' or a tighter prefix.",
     });
   }
 
@@ -499,7 +503,10 @@ export function collectHooksHardeningFindings(
       severity: remoteExposure ? "critical" : "warn",
       title: "Request sessionKey override is enabled without prefix restrictions",
       detail:
-        "hooks.allowRequestSessionKey=true and hooks.allowedSessionKeyPrefixes is unset/empty, so request payloads can target arbitrary session key shapes.",
+        "hooks.allowRequestSessionKey=true and hooks.allowedSessionKeyPrefixes is unset/empty, " +
+        "so request payloads can target arbitrary session key shapes (including 'main', 'cron:*', etc.). " +
+        "This allows session-targeting attacks; without prefix restrictions, hook callers can also " +
+        "route messages into unintended agent sessions.",
       remediation:
         'Set hooks.allowedSessionKeyPrefixes (for example, ["hook:"]) or disable request overrides.',
     });

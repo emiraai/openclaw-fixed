@@ -157,6 +157,22 @@ export async function runCronIsolatedAgentTurn(params: {
   sessionKey: string;
   agentId?: string;
   lane?: string;
+  /**
+   * SECURITY: Set to `true` when this turn originates from an external HTTP
+   * hook (`POST /hooks/agent`). This is used to determine whether external
+   * content security wrapping should be applied, independently of the session
+   * key format.
+   *
+   * The trust decision MUST be based on dispatch origin, not on session key
+   * format: session keys are operator/attacker-controlled strings. When
+   * `hooks.allowRequestSessionKey=true`, an attacker can supply a session key
+   * such as `"main"` which does not start with `"hook:"`, defeating the
+   * `isExternalHookSession()` check if that check is used alone.
+   *
+   * Callers that are NOT hook dispatchers (e.g. cron scheduler) must leave
+   * this field `undefined` or `false`.
+   */
+  fromExternalHook?: boolean;
 }): Promise<RunCronAgentTurnResult> {
   const isFastTestEnv = process.env.OPENCLAW_TEST_FAST === "1";
   const defaultAgentId = resolveDefaultAgentId(params.cfg);
@@ -371,7 +387,15 @@ export async function runCronIsolatedAgentTurn(params: {
 
   // SECURITY: Wrap external hook content with security boundaries to prevent prompt injection
   // unless explicitly allowed via a dangerous config override.
-  const isExternalHook = isExternalHookSession(baseSessionKey);
+  //
+  // Trust is based on DISPATCH ORIGIN (`params.fromExternalHook`), not on the
+  // session key format. Session keys are operator/attacker-controlled strings.
+  // When `hooks.allowRequestSessionKey=true`, a caller can supply any string as
+  // the session key (e.g. `"main"`), which would not match `isExternalHookSession()`
+  // if that check were used alone. We therefore treat a turn as external when
+  // EITHER the dispatch origin flag is set OR the session key carries a `hook:`
+  // prefix (legacy path for backward compatibility when the flag is absent).
+  const isExternalHook = params.fromExternalHook === true || isExternalHookSession(baseSessionKey);
   const allowUnsafeExternalContent =
     agentPayload?.allowUnsafeExternalContent === true ||
     (isGmailHook && params.cfg.hooks?.gmail?.allowUnsafeExternalContent === true);
@@ -390,8 +414,14 @@ export async function runCronIsolatedAgentTurn(params: {
   }
 
   if (shouldWrapExternal) {
-    // Wrap external content with security boundaries
-    const hookType = getHookType(baseSessionKey);
+    // Wrap external content with security boundaries.
+    // When the turn originates from an external HTTP hook (fromExternalHook=true) but the
+    // session key does not carry a hook: prefix (e.g. attacker-supplied "main"), fall back
+    // to "webhook" rather than "unknown" so the security wrapper has an accurate source label.
+    const hookType =
+      getHookType(baseSessionKey) === "unknown" && params.fromExternalHook === true
+        ? "webhook"
+        : getHookType(baseSessionKey);
     const safeContent = buildSafeExternalPrompt({
       content: params.message,
       source: hookType,
