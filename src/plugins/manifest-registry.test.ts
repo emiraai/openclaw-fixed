@@ -167,4 +167,58 @@ describe("loadPluginManifestRegistry", () => {
     expect(registry.plugins.length).toBe(1);
     expect(registry.plugins[0]?.origin).toBe("config");
   });
+
+  it("suppresses warning when bundled plugin is overridden by workspace install in same directory", () => {
+    const dir = makeTempDir();
+    const manifest = { id: "overridden-plugin", configSchema: { type: "object" } };
+    writeManifest(dir, manifest);
+
+    const candidates: PluginCandidate[] = [
+      createPluginCandidate({
+        idHint: "overridden-plugin",
+        rootDir: dir,
+        sourceName: "bundled.ts",
+        origin: "bundled",
+      }),
+      createPluginCandidate({
+        idHint: "overridden-plugin",
+        rootDir: dir,
+        sourceName: "workspace.ts",
+        origin: "workspace",
+      }),
+    ];
+
+    const registry = loadRegistry(candidates);
+    // Same directory, different origins - bundled override is expected
+    expect(countDuplicateWarnings(registry)).toBe(0);
+    expect(registry.plugins.length).toBe(1);
+    // Higher precedence (workspace < bundled) wins
+    expect(registry.plugins[0]?.origin).toBe("workspace");
+  });
+
+  it("suppresses warning when global plugin overrides bundled in same directory", () => {
+    const dir = makeTempDir();
+    const manifest = { id: "global-override", configSchema: { type: "object" } };
+    writeManifest(dir, manifest);
+
+    const candidates: PluginCandidate[] = [
+      createPluginCandidate({
+        idHint: "global-override",
+        rootDir: dir,
+        sourceName: "bundled.ts",
+        origin: "bundled",
+      }),
+      createPluginCandidate({
+        idHint: "global-override",
+        rootDir: dir,
+        sourceName: "global.ts",
+        origin: "global",
+      }),
+    ];
+
+    const registry = loadRegistry(candidates);
+    expect(countDuplicateWarnings(registry)).toBe(0);
+    expect(registry.plugins.length).toBe(1);
+    expect(registry.plugins[0]?.origin).toBe("global");
+  });
 });

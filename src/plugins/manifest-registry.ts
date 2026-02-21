@@ -1,10 +1,10 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveUserPath } from "../utils.js";
 import { normalizePluginsConfig, type NormalizedPluginsConfig } from "./config-state.js";
 import { discoverOpenClawPlugins, type PluginCandidate } from "./discovery.js";
 import { loadPluginManifest, type PluginManifest } from "./manifest.js";
-import { safeRealpathSync } from "./path-safety.js";
 import type { PluginConfigUiHint, PluginDiagnostic, PluginKind, PluginOrigin } from "./types.js";
 
 type SeenIdEntry = {
@@ -19,6 +19,20 @@ const PLUGIN_ORIGIN_RANK: Readonly<Record<PluginOrigin, number>> = {
   global: 2,
   bundled: 3,
 };
+
+function safeRealpathSync(rootDir: string, cache: Map<string, string>): string | null {
+  const cached = cache.get(rootDir);
+  if (cached) {
+    return cached;
+  }
+  try {
+    const resolved = fs.realpathSync(rootDir);
+    cache.set(rootDir, resolved);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
 
 export type PluginManifestRecord = {
   id: string;
@@ -200,7 +214,11 @@ export function loadPluginManifestRegistry(params: {
       // is a false-positive duplicate and can be silently skipped.
       const existingReal = safeRealpathSync(existing.candidate.rootDir, realpathCache);
       const candidateReal = safeRealpathSync(candidate.rootDir, realpathCache);
-      const samePlugin = Boolean(existingReal && candidateReal && existingReal === candidateReal);
+      const samePlugin =
+        existing.candidate.source === candidate.source ||
+        existing.candidate.rootDir === candidate.rootDir ||
+        path.normalize(existing.candidate.rootDir) === path.normalize(candidate.rootDir) ||
+        Boolean(existingReal && candidateReal && existingReal === candidateReal);
       if (samePlugin) {
         // Prefer higher-precedence origins even if candidates are passed in
         // an unexpected order (config > workspace > global > bundled).
@@ -216,6 +234,30 @@ export function loadPluginManifestRegistry(params: {
         }
         continue;
       }
+
+      // Bundled plugins are shipped with OpenClaw and often overridden by workspace/global/config
+      // installs. This is expected and should not warn, but only when they share the same directory.
+      // Different directories with the same id should still warn.
+      const isBundledOverride =
+        (existing.candidate.origin === "bundled" || candidate.origin === "bundled") &&
+        (existing.candidate.source === candidate.source ||
+          existing.candidate.rootDir === candidate.rootDir ||
+          path.normalize(existing.candidate.rootDir) === path.normalize(candidate.rootDir) ||
+          Boolean(existingReal && candidateReal && existingReal === candidateReal));
+      if (isBundledOverride) {
+        if (PLUGIN_ORIGIN_RANK[candidate.origin] < PLUGIN_ORIGIN_RANK[existing.candidate.origin]) {
+          records[existing.recordIndex] = buildRecord({
+            manifest,
+            candidate,
+            manifestPath: manifestRes.manifestPath,
+            schemaCacheKey,
+            configSchema,
+          });
+          seenIds.set(manifest.id, { candidate, recordIndex: existing.recordIndex });
+        }
+        continue;
+      }
+
       diagnostics.push({
         level: "warn",
         pluginId: manifest.id,
