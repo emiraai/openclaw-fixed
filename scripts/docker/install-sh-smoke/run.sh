@@ -52,14 +52,40 @@ curl -fsSL "$INSTALL_URL" | bash
 
 echo "==> Verify installed version"
 CLI_NAME="$PACKAGE_NAME"
+CLI_CMD=("$CLI_NAME")
+RESOLVED_CLI=""
 if ! command -v "$CLI_NAME" >/dev/null 2>&1; then
+  NPM_PREFIX="$(npm config get prefix 2>/dev/null || true)"
+  NPM_PREFIX="${NPM_PREFIX//$'\r'/}"
+  NPM_GLOBAL_BIN=""
+  if [[ -n "$NPM_PREFIX" && "$NPM_PREFIX" != "undefined" ]]; then
+    NPM_GLOBAL_BIN="${NPM_PREFIX%/}/bin"
+  fi
+
+  if [[ -n "$NPM_GLOBAL_BIN" && -x "$NPM_GLOBAL_BIN/$CLI_NAME" ]]; then
+    export PATH="$NPM_GLOBAL_BIN:$PATH"
+    RESOLVED_CLI="$NPM_GLOBAL_BIN/$CLI_NAME"
+  fi
+fi
+if [[ -z "$RESOLVED_CLI" ]] && command -v "$CLI_NAME" >/dev/null 2>&1; then
+  RESOLVED_CLI="$(command -v "$CLI_NAME")"
+fi
+if [[ -z "$RESOLVED_CLI" ]]; then
+  NPM_ROOT="$(npm root -g 2>/dev/null || true)"
+  NPM_ROOT="${NPM_ROOT//$'\r'/}"
+  if [[ -n "$NPM_ROOT" && -f "$NPM_ROOT/$CLI_NAME/dist/entry.js" ]]; then
+    RESOLVED_CLI="$NPM_ROOT/$CLI_NAME/dist/entry.js"
+    CLI_CMD=(node "$RESOLVED_CLI")
+  fi
+fi
+if [[ -z "$RESOLVED_CLI" ]]; then
   echo "ERROR: $PACKAGE_NAME is not on PATH" >&2
   exit 1
 fi
 if [[ -n "${OPENCLAW_INSTALL_LATEST_OUT:-}" ]]; then
   printf "%s" "$LATEST_VERSION" > "${OPENCLAW_INSTALL_LATEST_OUT:-}"
 fi
-INSTALLED_VERSION="$("$CLI_NAME" --version 2>/dev/null | head -n 1 | tr -d '\r')"
+INSTALLED_VERSION="$("${CLI_CMD[@]}" --version 2>/dev/null | head -n 1 | tr -d '\r')"
 echo "cli=$CLI_NAME installed=$INSTALLED_VERSION expected=$LATEST_VERSION"
 
 if [[ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]]; then
@@ -68,6 +94,6 @@ if [[ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]]; then
 fi
 
 echo "==> Sanity: CLI runs"
-"$CLI_NAME" --help >/dev/null
+"${CLI_CMD[@]}" --help >/dev/null
 
 echo "OK"
