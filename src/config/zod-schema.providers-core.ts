@@ -150,6 +150,8 @@ export const TelegramAccountSchemaBase = z
     // Legacy key kept for automatic migration to `streaming`.
     streamMode: z.enum(["off", "partial", "block"]).optional(),
     mediaMaxMb: z.number().positive().optional(),
+    /** Disable image compression when sending to preserve original quality. Defaults to false (compress). */
+    mediaOptimize: z.boolean().optional(),
     timeoutSeconds: z.number().int().positive().optional(),
     retry: RetryConfigSchema,
     network: z

@@ -106,6 +106,8 @@ export type TelegramAccountConfig = {
   /** @deprecated Legacy key; migrated automatically to `streaming` boolean. */
   streamMode?: "off" | "partial" | "block";
   mediaMaxMb?: number;
+  /** Disable image compression when sending to preserve original quality. Defaults to false (compress). */
+  mediaOptimize?: boolean;
   /** Telegram API client timeout in seconds (grammY ApiClientOptions). */
   timeoutSeconds?: number;
   /** Retry policy for outbound Telegram API calls. */

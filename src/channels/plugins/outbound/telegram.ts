@@ -1,3 +1,4 @@
+import { resolveTelegramAccount } from "../../../telegram/accounts.js";
 import type { TelegramInlineButtons } from "../../../telegram/button-types.js";
 import { markdownToTelegramHtmlChunks } from "../../../telegram/format.js";
 import {
@@ -34,10 +35,19 @@ export const telegramOutbound: ChannelOutboundAdapter = {
     deps,
     replyToId,
     threadId,
+    cfg,
   }) => {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
     const messageThreadId = parseTelegramThreadId(threadId);
+
+    // Get mediaOptimize config - if false, send as file to preserve quality
+    let asFile = false;
+    if (cfg && accountId) {
+      const resolved = resolveTelegramAccount({ cfg, accountId: accountId ?? undefined });
+      asFile = resolved.config.mediaOptimize === false;
+    }
+
     const result = await send(to, text, {
       verbose: false,
       mediaUrl,
@@ -46,10 +56,20 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       replyToMessageId,
       accountId: accountId ?? undefined,
       mediaLocalRoots,
+      asFile,
     });
     return { channel: "telegram", ...result };
   },
-  sendPayload: async ({ to, payload, mediaLocalRoots, accountId, deps, replyToId, threadId }) => {
+  sendPayload: async ({
+    to,
+    payload,
+    mediaLocalRoots,
+    accountId,
+    deps,
+    replyToId,
+    threadId,
+    cfg,
+  }) => {
     const send = deps?.sendTelegram ?? sendMessageTelegram;
     const replyToMessageId = parseTelegramReplyToMessageId(replyToId);
     const messageThreadId = parseTelegramThreadId(threadId);
@@ -64,6 +84,14 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       : payload.mediaUrl
         ? [payload.mediaUrl]
         : [];
+
+    // Get mediaOptimize config - if false, send as file to preserve quality
+    let asFile = false;
+    if (cfg && accountId) {
+      const resolved = resolveTelegramAccount({ cfg, accountId: accountId ?? undefined });
+      asFile = resolved.config.mediaOptimize === false;
+    }
+
     const baseOpts = {
       verbose: false,
       textMode: "html" as const,
@@ -72,6 +100,7 @@ export const telegramOutbound: ChannelOutboundAdapter = {
       quoteText,
       accountId: accountId ?? undefined,
       mediaLocalRoots,
+      asFile,
     };
 
     if (mediaUrls.length === 0) {
