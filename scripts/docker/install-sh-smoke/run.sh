@@ -50,17 +50,102 @@ fi
 echo "==> Run official installer one-liner"
 curl -fsSL "$INSTALL_URL" | bash
 
+resolve_cli_path() {
+  local cli_name="$1"
+  local candidate=""
+
+  candidate="$(command -v "$cli_name" || true)"
+  if [[ -n "$candidate" ]]; then
+    printf "%s" "$candidate"
+    return 0
+  fi
+
+  local npm_prefix=""
+  npm_prefix="$(npm config get prefix 2>/dev/null || true)"
+  if [[ -n "$npm_prefix" && "$npm_prefix" != "undefined" && -x "$npm_prefix/bin/$cli_name" ]]; then
+    printf "%s" "$npm_prefix/bin/$cli_name"
+    return 0
+  fi
+
+  local fallback_bin=""
+  for fallback_bin in /usr/local/bin /usr/bin "$HOME/.npm-global/bin" "$HOME/.local/bin"; do
+    if [[ -x "$fallback_bin/$cli_name" ]]; then
+      printf "%s" "$fallback_bin/$cli_name"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+resolve_cli_entrypoint_from_package() {
+  local pkg_name="$1"
+  local npm_root=""
+  npm_root="$(npm root -g 2>/dev/null || true)"
+  if [[ -z "$npm_root" || "$npm_root" == "undefined" ]]; then
+    return 1
+  fi
+
+  local pkg_dir="$npm_root/$pkg_name"
+  local pkg_json="$pkg_dir/package.json"
+  if [[ ! -f "$pkg_json" ]]; then
+    return 1
+  fi
+
+  local bin_rel=""
+  bin_rel="$(node -e '
+const fs = require("fs");
+const pkgPath = process.argv[1];
+const pkgName = process.argv[2];
+const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+const bin = pkg?.bin;
+let rel = "";
+if (typeof bin === "string") {
+  rel = bin;
+} else if (bin && typeof bin === "object") {
+  rel = bin[pkgName] || Object.values(bin).find((value) => typeof value === "string") || "";
+}
+if (typeof rel === "string" && rel.length > 0) {
+  process.stdout.write(rel);
+}
+' "$pkg_json" "$pkg_name" 2>/dev/null || true)"
+  if [[ -z "$bin_rel" ]]; then
+    return 1
+  fi
+
+  if [[ -f "$pkg_dir/$bin_rel" ]]; then
+    printf "%s" "$pkg_dir/$bin_rel"
+    return 0
+  fi
+
+  return 1
+}
+
 echo "==> Verify installed version"
 CLI_NAME="$PACKAGE_NAME"
-if ! command -v "$CLI_NAME" >/dev/null 2>&1; then
+CMD_PATH="$(resolve_cli_path "$CLI_NAME" || true)"
+CMD_ENTRYPOINT=""
+if [[ -z "$CMD_PATH" ]]; then
+  CMD_ENTRYPOINT="$(resolve_cli_entrypoint_from_package "$CLI_NAME" || true)"
+fi
+if [[ -z "$CMD_PATH" && -z "$CMD_ENTRYPOINT" ]]; then
   echo "ERROR: $PACKAGE_NAME is not on PATH" >&2
+  echo "PATH=$PATH" >&2
+  echo "npm-prefix=$(npm config get prefix 2>/dev/null || true)" >&2
+  echo "npm-root=$(npm root -g 2>/dev/null || true)" >&2
   exit 1
 fi
 if [[ -n "${OPENCLAW_INSTALL_LATEST_OUT:-}" ]]; then
   printf "%s" "$LATEST_VERSION" > "${OPENCLAW_INSTALL_LATEST_OUT:-}"
 fi
-INSTALLED_VERSION="$("$CLI_NAME" --version 2>/dev/null | head -n 1 | tr -d '\r')"
-echo "cli=$CLI_NAME installed=$INSTALLED_VERSION expected=$LATEST_VERSION"
+INSTALLED_VERSION=""
+if [[ -n "$CMD_PATH" ]]; then
+  INSTALLED_VERSION="$("$CMD_PATH" --version 2>/dev/null | head -n 1 | tr -d '\r')"
+  echo "cli=$CLI_NAME cmd=$CMD_PATH installed=$INSTALLED_VERSION expected=$LATEST_VERSION"
+else
+  INSTALLED_VERSION="$(node "$CMD_ENTRYPOINT" --version 2>/dev/null | head -n 1 | tr -d '\r')"
+  echo "cli=$CLI_NAME entrypoint=$CMD_ENTRYPOINT installed=$INSTALLED_VERSION expected=$LATEST_VERSION"
+fi
 
 if [[ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]]; then
   echo "ERROR: expected ${CLI_NAME}@${LATEST_VERSION}, got ${CLI_NAME}@${INSTALLED_VERSION}" >&2
@@ -68,6 +153,10 @@ if [[ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]]; then
 fi
 
 echo "==> Sanity: CLI runs"
-"$CLI_NAME" --help >/dev/null
+if [[ -n "$CMD_PATH" ]]; then
+  "$CMD_PATH" --help >/dev/null
+else
+  node "$CMD_ENTRYPOINT" --help >/dev/null
+fi
 
 echo "OK"
