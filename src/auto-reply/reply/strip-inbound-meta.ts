@@ -51,12 +51,15 @@ export function stripInboundMetadata(text: string): string {
   const result: string[] = [];
   let inMetaBlock = false;
   let inFencedJson = false;
+  // Once real content has been collected, stop stripping metadata blocks —
+  // sentinels are only valid as a leading prefix, not mid-message.
+  let seenContent = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Detect start of a metadata block.
-    if (!inMetaBlock && INBOUND_META_SENTINELS.some((s) => line.startsWith(s))) {
+    // Detect start of a metadata block — only while still in the leading prefix.
+    if (!inMetaBlock && !seenContent && INBOUND_META_SENTINELS.some((s) => line.startsWith(s))) {
       inMetaBlock = true;
       inFencedJson = false;
       continue;
@@ -83,6 +86,9 @@ export function stripInboundMetadata(text: string): string {
     }
 
     result.push(line);
+    if (line.trim()) {
+      seenContent = true;
+    }
   }
 
   return result.join("\n").replace(/^\n+/, "");
