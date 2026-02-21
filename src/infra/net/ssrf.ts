@@ -525,6 +525,8 @@ export function createPinnedDispatcher(pinned: PinnedHostname): Dispatcher {
   return new Agent({
     connect: {
       lookup: pinned.lookup,
+      autoSelectFamily: true,
+      autoSelectFamilyAttemptTimeout: 300,
     },
   });
 }
