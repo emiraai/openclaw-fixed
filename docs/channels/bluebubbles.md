@@ -48,6 +48,13 @@ Security note:
 
 - Always set a webhook password. If you expose the gateway through a reverse proxy (Tailscale Serve/Funnel, nginx, Cloudflare Tunnel, ngrok), the proxy may connect to the gateway over loopback. The BlueBubbles webhook handler treats requests with forwarding headers as proxied and will not accept passwordless webhooks.
 
+## Identity isolation (strongly recommended)
+
+- Use a dedicated Apple ID and dedicated macOS user for bot traffic.
+- Avoid using the same Apple ID for both the bot and the human chatting with the bot.
+- In same-account/self-chat setups, BlueBubbles webhook payloads can include system-style records of prior bot outputs (for example `System: ... Assistant sent "..."`). OpenClaw can ingest those as new inbound user messages and reply again, creating an echo loop.
+- If you hit recursive replies, switch to a dedicated bot identity, then restart the gateway and start a fresh session for the affected chat.
+
 ## Keeping Messages.app alive (VM / headless setups)
 
 Some macOS VM / always-on setups can end up with Messages.app going “idle” (incoming events stop until the app is opened/foregrounded). A simple workaround is to **poke Messages every 5 minutes** using an AppleScript + LaunchAgent.
@@ -336,6 +343,8 @@ Prefer `chat_guid` for stable routing:
 
 - If typing/read events stop working, check the BlueBubbles webhook logs and verify the gateway path matches `channels.bluebubbles.webhookPath`.
 - Pairing codes expire after one hour; use `openclaw pairing list bluebubbles` and `openclaw pairing approve bluebubbles <code>`.
+- If logs show repeated embedded runs where inbound BlueBubbles content contains earlier assistant text, you are likely in a same-Apple-ID echo loop. Move the bot to a dedicated Apple ID/user and restart with a fresh session.
+- This recursion pattern is separate from webhook password/encoding problems and separate from BlueBubbles Private API typing/read `500` noise.
 - Reactions require the BlueBubbles private API (`POST /api/v1/message/react`); ensure the server version exposes it.
 - Edit/unsend require macOS 13+ and a compatible BlueBubbles server version. On macOS 26 (Tahoe), edit is currently broken due to private API changes.
 - Group icon updates can be flaky on macOS 26 (Tahoe): the API may return success but the new icon does not sync.
