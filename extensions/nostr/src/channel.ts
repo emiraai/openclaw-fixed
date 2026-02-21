@@ -1,9 +1,11 @@
 import {
   buildChannelConfigSchema,
   collectStatusIssuesFromLastError,
+  createReplyPrefixOptions,
   createDefaultChannelRuntimeState,
   DEFAULT_ACCOUNT_ID,
   formatPairingApproveHint,
+  resolveAllowlistMatchSimple,
   type ChannelPlugin,
 } from "openclaw/plugin-sdk";
 import type { NostrProfile } from "./config-schema.js";
@@ -24,6 +26,21 @@ const activeBuses = new Map<string, NostrBusHandle>();
 
 // Store metrics snapshots per account (for status reporting)
 const metricsSnapshots = new Map<string, MetricsSnapshot>();
+
+function normalizeNostrAllowEntry(raw: string): string {
+  const trimmed = raw.replace(/^nostr:/i, "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed === "*") {
+    return "*";
+  }
+  try {
+    return normalizePubkey(trimmed);
+  } catch {
+    return trimmed.toLowerCase();
+  }
+}
 
 export const nostrPlugin: ChannelPlugin<ResolvedNostrAccount> = {
   id: "nostr",
@@ -210,22 +227,160 @@ export const nostrPlugin: ChannelPlugin<ResolvedNostrAccount> = {
         privateKey: account.privateKey,
         relays: account.relays,
         onMessage: async (senderPubkey, text, reply) => {
+          const normalizedSenderPubkey = normalizeNostrAllowEntry(senderPubkey);
           ctx.log?.debug?.(
-            `[${account.accountId}] DM from ${senderPubkey}: ${text.slice(0, 50)}...`,
+            `[${account.accountId}] DM from ${normalizedSenderPubkey}: ${text.slice(0, 50)}...`,
           );
 
-          // Forward to OpenClaw's message pipeline
-          await (
-            runtime.channel.reply as { handleInboundMessage?: (params: unknown) => Promise<void> }
-          ).handleInboundMessage?.({
+          const cfg = runtime.config.loadConfig();
+          const dmPolicy = account.config.dmPolicy ?? "pairing";
+          if (dmPolicy === "disabled") {
+            ctx.log?.debug?.(
+              `[${account.accountId}] drop DM sender ${normalizedSenderPubkey} (dmPolicy=disabled)`,
+            );
+            return;
+          }
+
+          if (dmPolicy !== "open") {
+            const configuredAllowFrom = (account.config.allowFrom ?? [])
+              .map((entry) => normalizeNostrAllowEntry(String(entry)))
+              .filter(Boolean);
+            const storeAllowFrom = await runtime.channel.pairing
+              .readAllowFromStore("nostr", undefined, account.accountId)
+              .catch(() => []);
+            const effectiveAllowFrom = [...configuredAllowFrom, ...storeAllowFrom]
+              .map((entry) => normalizeNostrAllowEntry(String(entry)))
+              .filter(Boolean);
+            const senderAllowed = resolveAllowlistMatchSimple({
+              allowFrom: effectiveAllowFrom,
+              senderId: normalizedSenderPubkey,
+            }).allowed;
+            if (!senderAllowed) {
+              if (dmPolicy === "pairing") {
+                const { code, created } = await runtime.channel.pairing.upsertPairingRequest({
+                  channel: "nostr",
+                  id: normalizedSenderPubkey,
+                  accountId: account.accountId,
+                });
+                if (created) {
+                  try {
+                    await reply(
+                      runtime.channel.pairing.buildPairingReply({
+                        channel: "nostr",
+                        idLine: `Your Nostr pubkey: ${normalizedSenderPubkey}`,
+                        code,
+                      }),
+                    );
+                  } catch (error) {
+                    ctx.log?.error?.(
+                      `[${account.accountId}] failed sending pairing reply to ${normalizedSenderPubkey}: ${String(error)}`,
+                    );
+                  }
+                }
+              }
+              ctx.log?.debug?.(
+                `[${account.accountId}] drop DM sender ${normalizedSenderPubkey} (dmPolicy=${dmPolicy})`,
+              );
+              return;
+            }
+          }
+
+          const route = runtime.channel.routing.resolveAgentRoute({
+            cfg,
             channel: "nostr",
             accountId: account.accountId,
-            senderId: senderPubkey,
-            chatType: "direct",
-            chatId: senderPubkey, // For DMs, chatId is the sender's pubkey
-            text,
-            reply: async (responseText: string) => {
-              await reply(responseText);
+            peer: { kind: "direct", id: normalizedSenderPubkey },
+          });
+          const storePath = runtime.channel.session.resolveStorePath(cfg.session?.store, {
+            agentId: route.agentId,
+          });
+          const envelopeOptions = runtime.channel.reply.resolveEnvelopeFormatOptions(cfg);
+          const previousTimestamp = runtime.channel.session.readSessionUpdatedAt({
+            storePath,
+            sessionKey: route.sessionKey,
+          });
+          const body = runtime.channel.reply.formatAgentEnvelope({
+            channel: "Nostr",
+            from: normalizedSenderPubkey,
+            timestamp: Date.now(),
+            previousTimestamp,
+            envelope: envelopeOptions,
+            body: text,
+          });
+
+          const ctxPayload = runtime.channel.reply.finalizeInboundContext({
+            Body: body,
+            BodyForAgent: text,
+            RawBody: text,
+            CommandBody: text,
+            From: `nostr:${normalizedSenderPubkey}`,
+            To: `nostr:${account.publicKey}`,
+            SessionKey: route.sessionKey,
+            AccountId: route.accountId,
+            ChatType: "direct",
+            ConversationLabel: normalizedSenderPubkey,
+            SenderName: normalizedSenderPubkey,
+            SenderId: normalizedSenderPubkey,
+            Provider: "nostr",
+            Surface: "nostr",
+            MessageSid: `nostr:${Date.now()}:${normalizedSenderPubkey.slice(0, 12)}`,
+            Timestamp: Date.now(),
+            OriginatingChannel: "nostr",
+            OriginatingTo: `nostr:${account.publicKey}`,
+          });
+
+          await runtime.channel.session.recordInboundSession({
+            storePath,
+            sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+            ctx: ctxPayload,
+            updateLastRoute: {
+              sessionKey: route.mainSessionKey,
+              channel: "nostr",
+              to: normalizedSenderPubkey,
+              accountId: route.accountId,
+            },
+            onRecordError: (error) => {
+              ctx.log?.error?.(
+                `[${account.accountId}] failed updating nostr session meta: ${String(error)}`,
+              );
+            },
+          });
+
+          const tableMode = runtime.channel.text.resolveMarkdownTableMode({
+            cfg,
+            channel: "nostr",
+            accountId: account.accountId,
+          });
+          const { onModelSelected, ...prefixOptions } = createReplyPrefixOptions({
+            cfg,
+            agentId: route.agentId,
+            channel: "nostr",
+            accountId: account.accountId,
+          });
+
+          await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+            ctx: ctxPayload,
+            cfg,
+            dispatcherOptions: {
+              ...prefixOptions,
+              deliver: async (payload) => {
+                const responseText = runtime.channel.text.convertMarkdownTables(
+                  payload.text ?? "",
+                  tableMode,
+                );
+                if (!responseText.trim()) {
+                  return;
+                }
+                await reply(responseText);
+              },
+              onError: (error, info) => {
+                ctx.log?.error?.(
+                  `[${account.accountId}] Nostr ${info.kind} reply failed: ${String(error)}`,
+                );
+              },
+            },
+            replyOptions: {
+              onModelSelected,
             },
           });
         },
