@@ -60,6 +60,8 @@ function defaultConfig(overrides: Partial<PostHogPluginConfig> = {}): PostHogPlu
     host: "https://us.i.posthog.com",
     privacyMode: false,
     enabled: true,
+    traceBy: "message",
+    traceTimeout: 60,
     ...overrides,
   };
 }
@@ -459,5 +461,218 @@ describe("registerPostHogHooks", () => {
     );
 
     expect(captureMock).not.toHaveBeenCalled();
+  });
+
+  describe("traceBy: session", () => {
+    test("different runIds within timeout share the same trace", async () => {
+      const { api, hooks, services } = createMockApi();
+      registerPostHogHooks(api, defaultConfig({ traceBy: "session", traceTimeout: 60 }));
+      await services[0]!.start();
+
+      const llmInputHandlers = hooks.get("llm_input")!;
+      const llmOutputHandlers = hooks.get("llm_output")!;
+
+      // First message (runId "run-a")
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "Hello",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:session-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["Hi!"],
+          usage: { input: 5, output: 2 },
+        },
+        { sessionKey: "telegram:session-test" },
+      );
+
+      const traceId1 = captureMock.mock.calls[0]![0].properties.$ai_trace_id;
+
+      // Second message — different runId, within timeout
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "How are you?",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:session-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["I'm good!"],
+          usage: { input: 5, output: 3 },
+        },
+        { sessionKey: "telegram:session-test" },
+      );
+
+      const traceId2 = captureMock.mock.calls[1]![0].properties.$ai_trace_id;
+      expect(traceId1).toBeTruthy();
+      expect(traceId2).toBeTruthy();
+      expect(traceId1).toBe(traceId2);
+    });
+
+    test("message after timeout gets a new trace", async () => {
+      const { api, hooks, services } = createMockApi();
+      registerPostHogHooks(api, defaultConfig({ traceBy: "session", traceTimeout: 30 }));
+      await services[0]!.start();
+
+      const llmInputHandlers = hooks.get("llm_input")!;
+      const llmOutputHandlers = hooks.get("llm_output")!;
+
+      // First message
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "Hello",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:timeout-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["Hi!"],
+          usage: { input: 5, output: 2 },
+        },
+        { sessionKey: "telegram:timeout-test" },
+      );
+
+      const traceId1 = captureMock.mock.calls[0]![0].properties.$ai_trace_id;
+
+      // Advance time past the 30-minute timeout
+      vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31 * 60_000);
+
+      // Second message — after timeout
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "I'm back",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:timeout-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["Welcome back!"],
+          usage: { input: 5, output: 3 },
+        },
+        { sessionKey: "telegram:timeout-test" },
+      );
+
+      const traceId2 = captureMock.mock.calls[1]![0].properties.$ai_trace_id;
+      expect(traceId1).toBeTruthy();
+      expect(traceId2).toBeTruthy();
+      expect(traceId1).not.toBe(traceId2);
+
+      vi.restoreAllMocks();
+    });
+
+    test("both traces share the same $ai_session_id", async () => {
+      const { api, hooks, services } = createMockApi();
+      registerPostHogHooks(api, defaultConfig({ traceBy: "session", traceTimeout: 1 }));
+      await services[0]!.start();
+
+      const llmInputHandlers = hooks.get("llm_input")!;
+      const llmOutputHandlers = hooks.get("llm_output")!;
+
+      // First message
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "Hello",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:session-id-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-a",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["Hi!"],
+          usage: { input: 5, output: 2 },
+        },
+        { sessionKey: "telegram:session-id-test" },
+      );
+
+      // Advance past 1-minute timeout
+      vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2 * 60_000);
+
+      // Second message — new trace due to timeout
+      await llmInputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          prompt: "Back again",
+          historyMessages: [],
+          imagesCount: 0,
+        },
+        { sessionKey: "telegram:session-id-test" },
+      );
+      await llmOutputHandlers[0]!(
+        {
+          runId: "run-b",
+          sessionId: "sess-1",
+          provider: "openai",
+          model: "gpt-4o",
+          assistantTexts: ["Welcome!"],
+          usage: { input: 5, output: 2 },
+        },
+        { sessionKey: "telegram:session-id-test" },
+      );
+
+      // Different traces but same session ID
+      const session1 = captureMock.mock.calls[0]![0].properties.$ai_session_id;
+      const session2 = captureMock.mock.calls[1]![0].properties.$ai_session_id;
+      expect(session1).toBe("telegram:session-id-test");
+      expect(session2).toBe("telegram:session-id-test");
+
+      const traceId1 = captureMock.mock.calls[0]![0].properties.$ai_trace_id;
+      const traceId2 = captureMock.mock.calls[1]![0].properties.$ai_trace_id;
+      expect(traceId1).not.toBe(traceId2);
+
+      vi.restoreAllMocks();
+    });
   });
 });

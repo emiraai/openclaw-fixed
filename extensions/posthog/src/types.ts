@@ -3,6 +3,8 @@ export type PostHogPluginConfig = {
   host: string;
   privacyMode: boolean;
   enabled: boolean;
+  traceBy: "message" | "session";
+  traceTimeout: number;
 };
 
 export type RunState = {

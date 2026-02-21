@@ -23,6 +23,8 @@ Add to your `openclaw.json` (or `openclaw.yaml`):
           "apiKey": "phc_your_project_key",
           "host": "https://us.i.posthog.com",
           "privacyMode": true,
+          "traceBy": "message",
+          "traceTimeout": 60,
         },
       },
     },
@@ -35,12 +37,14 @@ Add to your `openclaw.json` (or `openclaw.yaml`):
 
 ### Options
 
-| Option        | Type      | Default                    | Description                                                   |
-| ------------- | --------- | -------------------------- | ------------------------------------------------------------- |
-| `apiKey`      | `string`  | _(required)_               | Your PostHog project API key                                  |
-| `host`        | `string`  | `https://us.i.posthog.com` | PostHog instance URL                                          |
-| `privacyMode` | `boolean` | `true`                     | When enabled, LLM input/output content is not sent to PostHog |
-| `enabled`     | `boolean` | `true`                     | Enable or disable the plugin                                  |
+| Option         | Type                       | Default                    | Description                                                                                                           |
+| -------------- | -------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `apiKey`       | `string`                   | _(required)_               | Your PostHog project API key                                                                                          |
+| `host`         | `string`                   | `https://us.i.posthog.com` | PostHog instance URL                                                                                                  |
+| `privacyMode`  | `boolean`                  | `true`                     | When enabled, LLM input/output content is not sent to PostHog                                                         |
+| `traceBy`      | `"message"` \| `"session"` | `"message"`                | Trace grouping mode. `"message"`: one trace per runId. `"session"`: group all generations in a session into one trace |
+| `traceTimeout` | `number`                   | `60`                       | Minutes of inactivity before starting a new trace (only used when `traceBy` is `"session"`)                           |
+| `enabled`      | `boolean`                  | `true`                     | Enable or disable the plugin                                                                                          |
 
 > **Note:** `diagnostics.enabled` must be `true` in your OpenClaw config for trace-level events (`$ai_trace`) to be captured.
 

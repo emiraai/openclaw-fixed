@@ -16,6 +16,8 @@ export function registerPostHogHooks(api: OpenClawPluginApi, config: PostHogPlug
   const generationSpans = new Map<string, string>();
   /** Last runId seen per sessionKey — a new runId means a new message cycle */
   const lastRunId = new Map<string, string>();
+  /** Timestamp of last llm_output per sessionKey — used for session-mode timeout */
+  const lastOutputAt = new Map<string, number>();
 
   let client: import("posthog-node").PostHog | null = null;
   let unsubscribe: (() => void) | null = null;
@@ -25,16 +27,29 @@ export function registerPostHogHooks(api: OpenClawPluginApi, config: PostHogPlug
       return generateTraceId();
     }
 
-    const existingTraceId = traces.get(sessionKey);
-    const prevRunId = lastRunId.get(sessionKey);
+    if (config.traceBy === "session") {
+      const existing = traces.get(sessionKey);
+      const lastOutput = lastOutputAt.get(sessionKey);
+      const timeoutMs = config.traceTimeout * 60_000;
 
-    // Same runId = same message cycle (e.g. tool-use continuation within one
-    // agent invocation). Reuse the existing trace.
-    if (existingTraceId && prevRunId === runId) {
-      return existingTraceId;
+      // Reuse trace if it exists and hasn't timed out
+      if (existing && lastOutput && Date.now() - lastOutput < timeoutMs) {
+        return existing;
+      }
+
+      // Otherwise start a new trace
+      const traceId = generateTraceId();
+      traces.set(sessionKey, traceId);
+      return traceId;
     }
 
-    // New runId = new message cycle, start a fresh trace.
+    // "message" mode (default) — split on runId change
+    const prevRunId = lastRunId.get(sessionKey);
+    const existing = traces.get(sessionKey);
+    if (existing && prevRunId === runId) {
+      return existing;
+    }
+
     lastRunId.set(sessionKey, runId);
     const traceId = generateTraceId();
     traces.set(sessionKey, traceId);
@@ -74,8 +89,9 @@ export function registerPostHogHooks(api: OpenClawPluginApi, config: PostHogPlug
               event: traceEvent.event,
               properties: traceEvent.properties,
             });
-            // Clean up trace state after completion
-            if (evt.sessionKey) {
+            // In message mode, clean up trace state after completion.
+            // In session mode, keep the trace alive for reuse across messages.
+            if (evt.sessionKey && config.traceBy !== "session") {
               traces.delete(evt.sessionKey);
               generationSpans.delete(evt.sessionKey);
             }
@@ -94,6 +110,7 @@ export function registerPostHogHooks(api: OpenClawPluginApi, config: PostHogPlug
       traces.clear();
       generationSpans.clear();
       lastRunId.clear();
+      lastOutputAt.clear();
     },
   });
 
@@ -139,6 +156,9 @@ export function registerPostHogHooks(api: OpenClawPluginApi, config: PostHogPlug
     const sessionKey = ctx.sessionKey;
     if (sessionKey) {
       generationSpans.set(sessionKey, runState.spanId);
+      if (config.traceBy === "session") {
+        lastOutputAt.set(sessionKey, Date.now());
+      }
     }
 
     const generation = buildAiGeneration(runState, event, config.privacyMode);
