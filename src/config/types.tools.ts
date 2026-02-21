@@ -301,6 +301,8 @@ export type MemorySearchConfig = {
     modelPath?: string;
     /** Optional cache directory for local models. */
     modelCacheDir?: string;
+    /** GPU compute backend. false = CPU only, auto = best available (default). */
+    gpu?: "auto" | "metal" | "cuda" | "vulkan" | false;
   };
   /** Index storage configuration. */
   store?: {
