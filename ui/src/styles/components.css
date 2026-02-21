@@ -762,7 +762,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
   grid-template-areas:
     "main meta"
-    "footer footer";
+    "footer footer"
+    "history history";
   row-gap: 10px;
 }
 
@@ -784,6 +785,13 @@
   gap: 12px;
   border-top: 1px solid var(--border);
   padding-top: 10px;
+}
+
+.cron-job-history {
+  grid-area: history;
+  border-top: 1px dashed var(--border);
+  padding-top: 4px;
+  margin-top: 4px;
 }
 
 .cron-job-chips {

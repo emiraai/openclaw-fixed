@@ -43,11 +43,11 @@ function createProps(overrides: Partial<CronProps> = {}): CronProps {
 }
 
 describe("cron view", () => {
-  it("prompts to select a job before showing run history", () => {
+  it("does not show run history before a job is selected", () => {
     const container = document.createElement("div");
     render(renderCron(createProps()), container);
 
-    expect(container.textContent).toContain("Select a job to inspect run history.");
+    expect(container.textContent).not.toContain("Run history");
   });
 
   it("loads run history when clicking a job row", () => {
@@ -101,10 +101,12 @@ describe("cron view", () => {
 
   it("renders run chat links when session keys are present", () => {
     const container = document.createElement("div");
+    const job = createJob("job-1");
     render(
       renderCron(
         createProps({
           basePath: "/ui",
+          jobs: [job],
           runsJobId: "job-1",
           runs: [
             {
@@ -127,7 +129,7 @@ describe("cron view", () => {
     );
   });
 
-  it("shows selected job name and sorts run history newest first", () => {
+  it("shows run history inline and sorts newest first", () => {
     const container = document.createElement("div");
     const job = createJob("job-1");
     render(
@@ -144,16 +146,12 @@ describe("cron view", () => {
       container,
     );
 
-    expect(container.textContent).toContain("Latest runs for Daily ping.");
-
-    const cards = Array.from(container.querySelectorAll(".card"));
-    const runHistoryCard = cards.find(
-      (card) => card.querySelector(".card-title")?.textContent?.trim() === "Run history",
-    );
-    expect(runHistoryCard).not.toBeUndefined();
+    const historySection = container.querySelector(".cron-job-history");
+    expect(historySection).not.toBeNull();
+    expect(historySection?.textContent).toContain("Run history");
 
     const summaries = Array.from(
-      runHistoryCard?.querySelectorAll(".list-item .list-sub") ?? [],
+      historySection?.querySelectorAll(".list-item .list-sub") ?? [],
     ).map((el) => (el.textContent ?? "").trim());
     expect(summaries[0]).toBe("newer run");
     expect(summaries[1]).toBe("older run");

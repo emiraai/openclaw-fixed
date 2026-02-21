@@ -56,10 +56,6 @@ function resolveChannelLabel(props: CronProps, channel: string): string {
 
 export function renderCron(props: CronProps) {
   const channelOptions = buildChannelOptions(props);
-  const selectedJob =
-    props.runsJobId == null ? undefined : props.jobs.find((job) => job.id === props.runsJobId);
-  const selectedRunTitle = selectedJob?.name ?? props.runsJobId ?? "(select a job)";
-  const orderedRuns = props.runs.toSorted((a, b) => b.ts - a.ts);
   const supportsAnnounce =
     props.form.sessionTarget === "isolated" && props.form.payloadKind === "agentTurn";
   const selectedDeliveryMode =
@@ -319,26 +315,6 @@ export function renderCron(props: CronProps) {
           `
       }
     </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <div class="card-title">Run history</div>
-      <div class="card-sub">Latest runs for ${selectedRunTitle}.</div>
-      ${
-        props.runsJobId == null
-          ? html`
-              <div class="muted" style="margin-top: 12px">Select a job to inspect run history.</div>
-            `
-          : orderedRuns.length === 0
-            ? html`
-                <div class="muted" style="margin-top: 12px">No runs yet.</div>
-              `
-            : html`
-              <div class="list" style="margin-top: 12px;">
-                ${orderedRuns.map((entry) => renderRun(entry, props.basePath))}
-              </div>
-            `
-      }
-    </section>
   `;
 }
 
@@ -414,6 +390,8 @@ function renderScheduleFields(props: CronProps) {
 function renderJob(job: CronJob, props: CronProps) {
   const isSelected = props.runsJobId === job.id;
   const itemClass = `list-item list-item-clickable cron-job${isSelected ? " list-item-selected" : ""}`;
+  const orderedRuns = isSelected ? props.runs.toSorted((a, b) => b.ts - a.ts) : [];
+
   return html`
     <div class=${itemClass} @click=${() => props.onLoadRuns(job.id)}>
       <div class="list-main">
@@ -476,6 +454,26 @@ function renderJob(job: CronJob, props: CronProps) {
           </button>
         </div>
       </div>
+      ${
+        isSelected
+          ? html`
+            <div class="cron-job-history" @click=${(e: Event) => e.stopPropagation()}>
+              <div class="card-title" style="font-size: 0.9em; margin-top: 12px;">Run history</div>
+              ${
+                orderedRuns.length === 0
+                  ? html`
+                      <div class="muted" style="margin-top: 8px; font-size: 0.85em">No runs yet.</div>
+                    `
+                  : html`
+                    <div class="list" style="margin-top: 8px;">
+                      ${orderedRuns.map((entry) => renderRun(entry, props.basePath))}
+                    </div>
+                  `
+              }
+            </div>
+          `
+          : nothing
+      }
     </div>
   `;
 }
