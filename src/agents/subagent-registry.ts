@@ -4,7 +4,11 @@ import { onAgentEvent } from "../infra/agent-events.js";
 import { defaultRuntime } from "../runtime.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
-import { runSubagentAnnounceFlow, type SubagentRunOutcome } from "./subagent-announce.js";
+import {
+  runSubagentAnnounceFlow,
+  type SubagentAnnounceMode,
+  type SubagentRunOutcome,
+} from "./subagent-announce.js";
 import {
   loadSubagentRegistryFromDisk,
   saveSubagentRegistryToDisk,
@@ -19,6 +23,8 @@ export type SubagentRunRecord = {
   requesterDisplayKey: string;
   task: string;
   cleanup: "delete" | "keep";
+  /** Announcement routing mode for this run. */
+  announce?: SubagentAnnounceMode;
   label?: string;
   model?: string;
   runTimeoutSeconds?: number;
@@ -110,6 +116,7 @@ function startSubagentAnnounceCleanupFlow(runId: string, entry: SubagentRunRecor
     endedAt: entry.endedAt,
     label: entry.label,
     outcome: entry.outcome,
+    announce: entry.announce,
   }).then((didAnnounce) => {
     finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
   });
@@ -512,6 +519,7 @@ export function registerSubagentRun(params: {
   requesterDisplayKey: string;
   task: string;
   cleanup: "delete" | "keep";
+  announce?: SubagentAnnounceMode;
   label?: string;
   model?: string;
   runTimeoutSeconds?: number;
@@ -532,6 +540,7 @@ export function registerSubagentRun(params: {
     requesterDisplayKey: params.requesterDisplayKey,
     task: params.task,
     cleanup: params.cleanup,
+    announce: params.announce,
     expectsCompletionMessage: params.expectsCompletionMessage,
     label: params.label,
     model: params.model,

@@ -1,5 +1,5 @@
 ---
-summary: "Sub-agents: spawning isolated agent runs that announce results back to the requester chat"
+summary: "Sub-agents: spawning isolated agent runs with configurable announce routing (user/parent/skip)"
 read_when:
   - You want background/parallel work via the agent
   - You are changing sessions_spawn or sub-agent tool policy
@@ -8,7 +8,7 @@ title: "Sub-Agents"
 
 # Sub-agents
 
-Sub-agents are background agent runs spawned from an existing agent run. They run in their own session (`agent:<agentId>:subagent:<uuid>`) and, when finished, **announce** their result back to the requester chat channel.
+Sub-agents are background agent runs spawned from an existing agent run. They run in their own session (`agent:<agentId>:subagent:<uuid>`) and, when finished, announce according to mode: to the requester chat (`user`), to the parent session for orchestration (`parent`), or skipped (`skip`).
 
 ## Slash command
 
@@ -29,7 +29,10 @@ Use `/subagents` to inspect or control sub-agent runs for the **current session*
 `/subagents spawn` starts a background sub-agent as a user command, not an internal relay, and it sends one final completion update back to the requester chat when the run finishes.
 
 - The spawn command is non-blocking; it returns a run id immediately.
-- On completion, the sub-agent announces a summary/result message back to the requester chat channel.
+- On completion, announce behavior depends on mode:
+  - `announce: "user"` (default): posts back to the requester chat channel.
+  - `announce: "parent"`: injects an internal update into the requester session (`deliver=false`) so orchestration can continue.
+  - `announce: "skip"`: suppresses announce delivery and only runs cleanup.
 - For manual spawns, delivery is resilient:
   - OpenClaw tries direct `agent` delivery first with a stable idempotency key.
   - If direct delivery fails, it falls back to queue routing.
@@ -60,6 +63,7 @@ Use `sessions_spawn`:
 - Then runs an announce step and posts the announce reply to the requester chat channel
 - Default model: inherits the caller unless you set `agents.defaults.subagents.model` (or per-agent `agents.list[].subagents.model`); an explicit `sessions_spawn.model` still wins.
 - Default thinking: inherits the caller unless you set `agents.defaults.subagents.thinking` (or per-agent `agents.list[].subagents.thinking`); an explicit `sessions_spawn.thinking` still wins.
+- Default announce mode: `user` unless you set `agents.defaults.subagents.announce`; an explicit `sessions_spawn.announce` still wins.
 
 Tool params:
 
@@ -70,6 +74,7 @@ Tool params:
 - `thinking?` (optional; overrides thinking level for the sub-agent run)
 - `runTimeoutSeconds?` (default `0`; when set, the sub-agent run is aborted after N seconds)
 - `cleanup?` (`delete|keep`, default `keep`)
+- `announce?` (`user|parent|skip`, default resolves from config then falls back to `user`)
 
 Allowlist:
 
@@ -159,9 +164,12 @@ Note: the merge is additive, so main profiles are always available as fallbacks.
 Sub-agents report back via an announce step:
 
 - The announce step runs inside the sub-agent session (not the requester session).
-- If the sub-agent replies exactly `ANNOUNCE_SKIP`, nothing is posted.
-- Otherwise the announce reply is posted to the requester chat channel via a follow-up `agent` call (`deliver=true`).
-- Announce replies preserve thread/topic routing when available (Slack threads, Telegram topics, Matrix threads).
+- If the sub-agent replies exactly `ANNOUNCE_SKIP`, no follow-up message is posted.
+- Announce routing follows mode:
+  - `user`: follow-up `agent` delivery to the requester chat (`deliver=true`).
+  - `parent`: internal follow-up to the requester session (`deliver=false`) for orchestration.
+  - `skip`: no announce delivery.
+- Announce replies preserve thread/topic routing when available in `user` mode (Slack threads, Telegram topics, Matrix threads).
 - Announce messages are normalized to a stable template:
   - `Status:` derived from the run outcome (`success`, `error`, `timeout`, or `unknown`).
   - `Result:` the summary content from the announce step (or `(not available)` if missing).

@@ -15,6 +15,7 @@ const SessionsSpawnToolSchema = Type.Object({
   // Back-compat: older callers used timeoutSeconds for this tool.
   timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
   cleanup: optionalStringEnum(["delete", "keep"] as const),
+  announce: optionalStringEnum(["user", "parent", "skip"] as const),
 });
 
 export function createSessionsSpawnTool(opts?: {
@@ -34,7 +35,7 @@ export function createSessionsSpawnTool(opts?: {
     label: "Sessions",
     name: "sessions_spawn",
     description:
-      "Spawn a background sub-agent run in an isolated session and announce the result back to the requester chat.",
+      "Spawn a background sub-agent run in an isolated session and announce the result to the requester chat or parent session.",
     parameters: SessionsSpawnToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -45,6 +46,10 @@ export function createSessionsSpawnTool(opts?: {
       const thinkingOverrideRaw = readStringParam(params, "thinking");
       const cleanup =
         params.cleanup === "keep" || params.cleanup === "delete" ? params.cleanup : "keep";
+      const announce =
+        params.announce === "user" || params.announce === "parent" || params.announce === "skip"
+          ? params.announce
+          : undefined;
       // Back-compat: older callers used timeoutSeconds for this tool.
       const timeoutSecondsCandidate =
         typeof params.runTimeoutSeconds === "number"
@@ -66,6 +71,7 @@ export function createSessionsSpawnTool(opts?: {
           thinking: thinkingOverrideRaw,
           runTimeoutSeconds,
           cleanup,
+          announce,
           expectsCompletionMessage: true,
         },
         {

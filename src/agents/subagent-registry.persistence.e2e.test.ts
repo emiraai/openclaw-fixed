@@ -14,9 +14,13 @@ import { loadSubagentRegistryFromDisk } from "./subagent-registry.store.js";
 const { announceSpy } = vi.hoisted(() => ({
   announceSpy: vi.fn(async () => true),
 }));
-vi.mock("./subagent-announce.js", () => ({
-  runSubagentAnnounceFlow: announceSpy,
-}));
+vi.mock("./subagent-announce.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./subagent-announce.js")>();
+  return {
+    ...actual,
+    runSubagentAnnounceFlow: announceSpy,
+  };
+});
 
 describe("subagent registry persistence", () => {
   const envSnapshot = captureEnv(["OPENCLAW_STATE_DIR"]);
@@ -209,6 +213,35 @@ describe("subagent registry persistence", () => {
 
     const after = JSON.parse(await fs.readFile(registryPath, "utf8")) as { version?: number };
     expect(after.version).toBe(2);
+  });
+
+  it("persists announce enum values", async () => {
+    tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-subagent-"));
+    process.env.OPENCLAW_STATE_DIR = tempStateDir;
+
+    registerSubagentRun({
+      runId: "run-announce-parent",
+      childSessionKey: "agent:main:subagent:announce-parent",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "announce parent",
+      cleanup: "keep",
+      announce: "parent",
+    });
+
+    registerSubagentRun({
+      runId: "run-announce-skip",
+      childSessionKey: "agent:main:subagent:announce-skip",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "announce skip",
+      cleanup: "keep",
+      announce: "skip",
+    });
+
+    const runs = loadSubagentRegistryFromDisk();
+    expect(runs.get("run-announce-parent")?.announce).toBe("parent");
+    expect(runs.get("run-announce-skip")?.announce).toBe("skip");
   });
 
   it("retries cleanup announce after a failed announce", async () => {

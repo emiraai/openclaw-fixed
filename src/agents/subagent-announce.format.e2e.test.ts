@@ -193,6 +193,98 @@ describe("subagent announce formatting", () => {
     expect(msg).toContain("completed successfully");
   });
 
+  it("announce=skip suppresses delivery but still performs delete cleanup", async () => {
+    const { runSubagentAnnounceFlow } = await import("./subagent-announce.js");
+
+    const didAnnounce = await runSubagentAnnounceFlow({
+      childSessionKey: "agent:main:subagent:skip",
+      childRunId: "run-skip",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "do thing",
+      timeoutMs: 1000,
+      cleanup: "delete",
+      waitForCompletion: false,
+      announce: "skip",
+      startedAt: 10,
+      endedAt: 20,
+      outcome: { status: "ok" },
+    });
+
+    expect(didAnnounce).toBe(true);
+    expect(agentSpy).not.toHaveBeenCalled();
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(sessionsDeleteSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("announce=parent injects an internal update into requester session", async () => {
+    const { runSubagentAnnounceFlow } = await import("./subagent-announce.js");
+
+    const didAnnounce = await runSubagentAnnounceFlow({
+      childSessionKey: "agent:main:subagent:parent",
+      childRunId: "run-parent",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "do thing",
+      label: "investigate logs",
+      timeoutMs: 1000,
+      cleanup: "keep",
+      waitForCompletion: false,
+      announce: "parent",
+      startedAt: 10,
+      endedAt: 20,
+      outcome: { status: "ok" },
+    });
+
+    expect(didAnnounce).toBe(true);
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(agentSpy).toHaveBeenCalledTimes(1);
+    const wakeCall = agentSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
+    expect(wakeCall?.params?.sessionKey).toBe("agent:main:main");
+    expect(wakeCall?.params?.deliver).toBe(false);
+    const wakeMessage =
+      typeof wakeCall?.params?.message === "string" ? wakeCall.params.message : "";
+    expect(wakeMessage).toContain("[System Message]");
+    expect(wakeMessage).toContain("internal orchestration update");
+  });
+
+  it("uses global subagents.announce when per-run announce is omitted", async () => {
+    const { runSubagentAnnounceFlow } = await import("./subagent-announce.js");
+    configOverride = {
+      session: {
+        mainKey: "main",
+        scope: "per-sender",
+      },
+      agents: {
+        defaults: {
+          subagents: {
+            announce: "parent",
+          },
+        },
+      },
+    };
+
+    const didAnnounce = await runSubagentAnnounceFlow({
+      childSessionKey: "agent:main:subagent:global-parent",
+      childRunId: "run-global-parent",
+      requesterSessionKey: "agent:main:main",
+      requesterDisplayKey: "main",
+      task: "do thing",
+      timeoutMs: 1000,
+      cleanup: "keep",
+      waitForCompletion: false,
+      startedAt: 10,
+      endedAt: 20,
+      outcome: { status: "ok" },
+    });
+
+    expect(didAnnounce).toBe(true);
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(agentSpy).toHaveBeenCalledTimes(1);
+    const call = agentSpy.mock.calls[0]?.[0] as { params?: Record<string, unknown> };
+    expect(call?.params?.deliver).toBe(false);
+  });
+
   it("uses child-run announce identity for direct idempotency", async () => {
     const { runSubagentAnnounceFlow } = await import("./subagent-announce.js");
     await runSubagentAnnounceFlow({

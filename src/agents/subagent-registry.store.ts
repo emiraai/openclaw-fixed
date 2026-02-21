@@ -3,6 +3,7 @@ import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
 import { loadJsonFile, saveJsonFile } from "../infra/json-file.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.js";
+import { normalizeAnnounceMode } from "./subagent-announce.js";
 import type { SubagentRunRecord } from "./subagent-registry.js";
 
 export type PersistedSubagentRegistryVersion = 1 | 2;
@@ -24,6 +25,7 @@ const REGISTRY_VERSION = 2 as const;
 type PersistedSubagentRunRecord = SubagentRunRecord;
 
 type LegacySubagentRunRecord = PersistedSubagentRunRecord & {
+  announce?: unknown;
   announceCompletedAt?: unknown;
   announceHandled?: unknown;
   requesterChannel?: unknown;
@@ -82,6 +84,7 @@ export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
         : isLegacy
           ? Boolean(typed.announceHandled ?? cleanupCompletedAt)
           : undefined;
+    const announce = normalizeAnnounceMode(typed.announce);
     const requesterOrigin = normalizeDeliveryContext(
       typed.requesterOrigin ?? {
         channel: typeof typed.requesterChannel === "string" ? typed.requesterChannel : undefined,
@@ -94,6 +97,7 @@ export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
       announceHandled: _announceHandled,
       requesterChannel: _channel,
       requesterAccountId: _accountId,
+      announce: _announce,
       ...rest
     } = typed;
     out.set(runId, {
@@ -101,6 +105,7 @@ export function loadSubagentRegistryFromDisk(): Map<string, SubagentRunRecord> {
       requesterOrigin,
       cleanupCompletedAt,
       cleanupHandled,
+      announce,
     });
     if (isLegacy) {
       migrated = true;
