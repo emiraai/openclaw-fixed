@@ -446,7 +446,7 @@ function buildChatCommands(): ChatCommandDefinition[] {
       key: "reset",
       nativeName: "reset",
       description: "Reset the current session.",
-      textAlias: "/reset",
+      textAliases: ["/reset", "/r"],
       acceptsArgs: true,
       category: "session",
     }),
