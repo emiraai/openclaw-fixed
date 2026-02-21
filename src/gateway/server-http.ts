@@ -537,7 +537,63 @@ export function createGatewayHttpServer(opts: {
         // Channel HTTP endpoints are gateway-auth protected by default.
         // Non-channel plugin routes remain plugin-owned and must enforce
         // their own auth when exposing sensitive functionality.
-        if (requestPath.startsWith("/api/channels/")) {
+        const mattermostCallbackPaths = new Set<string>();
+        const defaultMmCallbackPath = "/api/channels/mattermost/command";
+
+        const isMattermostCommandCallbackPath = (path: string): boolean =>
+          path === defaultMmCallbackPath || path.startsWith("/api/channels/mattermost/");
+
+        const normalizeCallbackPath = (value: unknown): string => {
+          const trimmed = typeof value === "string" ? value.trim() : "";
+          if (!trimmed) {
+            return defaultMmCallbackPath;
+          }
+          return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+        };
+
+        const addMattermostCallbackPathIfValid = (path: string) => {
+          if (isMattermostCommandCallbackPath(path)) {
+            mattermostCallbackPaths.add(path);
+          }
+        };
+
+        const tryAddCallbackUrlPath = (rawUrl: unknown) => {
+          if (typeof rawUrl !== "string") {
+            return;
+          }
+          const trimmed = rawUrl.trim();
+          if (!trimmed) {
+            return;
+          }
+          try {
+            const pathname = new URL(trimmed).pathname;
+            if (pathname) {
+              addMattermostCallbackPathIfValid(pathname);
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        const mmRaw = configSnapshot.channels?.mattermost as Record<string, unknown> | undefined;
+        const addMmCommands = (raw: unknown) => {
+          if (raw == null || typeof raw !== "object") {
+            return;
+          }
+          const commands = raw as Record<string, unknown>;
+          addMattermostCallbackPathIfValid(normalizeCallbackPath(commands?.callbackPath));
+          tryAddCallbackUrlPath(commands?.callbackUrl);
+        };
+
+        addMmCommands(mmRaw?.commands);
+        const accountsRaw = (mmRaw?.accounts ?? {}) as Record<string, unknown>;
+        for (const accountId of Object.keys(accountsRaw)) {
+          const accountCfg = accountsRaw[accountId] as Record<string, unknown> | undefined;
+          addMmCommands(accountCfg?.commands);
+        }
+
+        const isMattermostSlashCommandCallback = mattermostCallbackPaths.has(requestPath);
+        if (requestPath.startsWith("/api/channels/") && !isMattermostSlashCommandCallback) {
           const token = getBearerToken(req);
           const authResult = await authorizeHttpGatewayConnect({
             auth: resolvedAuth,
