@@ -3,6 +3,26 @@
 Agent stability extension for openclaw – timeout retry with exponential back-off
 and automatic image block stripping.
 
+## Enabling the Plugin
+
+This plugin is **not loaded by default**. Add it to the `plugins.entries` section of your openclaw config with `enabled: true`:
+
+```jsonc
+{
+  "plugins": {
+    "entries": {
+      "agent-resilience": {
+        "enabled": true,
+        "config": {
+          "retryMaxRounds": 3,
+          "imageStripEnabled": true
+        }
+      }
+    }
+  }
+}
+```
+
 ## Features
 
 | Feature | Description |
@@ -13,7 +33,6 @@ and automatic image block stripping.
 ## Configuration
 
 ```jsonc
-// openclaw.plugin.json configSchema fields
 {
   "retryMaxRounds": 5,         // Max retry attempts
   "retryBaseDelayMs": 5000,    // Initial retry delay (ms)
