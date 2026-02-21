@@ -295,6 +295,8 @@ By default, components are single use. Set `components.reusable=true` to allow b
 
 To restrict who can click a button, set `allowedUsers` on that button (Discord user IDs, tags, or `*`). When configured, unmatched users receive an ephemeral denial.
 
+The `/model` and `/models` slash commands open an interactive model picker with provider and model dropdowns plus a Submit step. The picker reply is ephemeral and only the invoking user can use it.
+
 File attachments:
 
 - `file` blocks must point to an attachment reference (`attachment://<filename>`)
@@ -532,6 +534,10 @@ Use `bindings[].match.roles` to route Discord guild members to different agents 
 
 See [Slash commands](/tools/slash-commands) for command catalog and behavior.
 
+Default slash command settings:
+
+- `ephemeral: true`
+
 ## Feature details
 
 <AccordionGroup>
@@ -614,7 +620,7 @@ See [Slash commands](/tools/slash-commands) for command catalog and behavior.
     - parent thread metadata can be used for parent-session linkage
     - thread config inherits parent channel config unless a thread-specific entry exists
 
-    Channel topics are injected as untrusted context and also included in trusted inbound metadata on new sessions.
+    Channel topics are injected as **untrusted** context (not as system prompt).
 
   </Accordion>
 
@@ -967,7 +973,7 @@ High-signal Discord fields:
 
 - startup/auth: `enabled`, `token`, `accounts.*`, `allowBots`
 - policy: `groupPolicy`, `dm.*`, `guilds.*`, `guilds.*.channels.*`
-- command: `commands.native`, `commands.useAccessGroups`, `configWrites`
+- command: `commands.native`, `commands.useAccessGroups`, `configWrites`, `slashCommand.*`
 - reply/history: `replyToMode`, `historyLimit`, `dmHistoryLimit`, `dms.*.historyLimit`
 - delivery: `textChunkLimit`, `chunkMode`, `maxLinesPerMessage`
 - streaming: `streamMode`, `draftChunk`, `blockStreaming`, `blockStreamingCoalesce`
