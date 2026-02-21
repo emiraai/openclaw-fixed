@@ -57,9 +57,27 @@ export async function assertSandboxPath(params: {
   allowFinalSymlink?: boolean;
 }) {
   const resolved = resolveSandboxPath(params);
-  await assertNoSymlinkEscape(resolved.relative, path.resolve(params.root), {
+  const rootResolved = path.resolve(params.root);
+  await assertNoSymlinkEscape(resolved.relative, rootResolved, {
     allowFinalSymlink: params.allowFinalSymlink,
   });
+  // SECURITY: Post-walk realpath verification to narrow the TOCTOU window.
+  // A symlink could be swapped between the lstat walk and actual file access.
+  // This re-check doesn't eliminate the race but makes exploitation harder.
+  try {
+    const finalReal = await fs.realpath(resolved.resolved);
+    const rootReal = await fs.realpath(rootResolved);
+    if (!isPathInside(rootReal, finalReal)) {
+      throw new Error(
+        `Path escaped sandbox root after resolution (${shortPath(rootReal)}): ${shortPath(finalReal)}`,
+      );
+    }
+  } catch (err) {
+    const anyErr = err as { code?: string };
+    if (anyErr.code !== "ENOENT") {
+      throw err;
+    }
+  }
   return resolved;
 }
 

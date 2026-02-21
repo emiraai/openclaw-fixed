@@ -124,6 +124,20 @@ function resolveFetchMaxResponseBytes(fetch?: WebFetchConfig): number {
   return Math.min(FETCH_MAX_RESPONSE_BYTES_MAX, Math.max(FETCH_MAX_RESPONSE_BYTES_MIN, value));
 }
 
+function resolveFetchDomainAllowlist(fetch?: WebFetchConfig): string[] | undefined {
+  if (!fetch || typeof fetch !== "object") {
+    return undefined;
+  }
+  const raw = "domainAllowlist" in fetch ? fetch.domainAllowlist : undefined;
+  if (!Array.isArray(raw)) {
+    return undefined;
+  }
+  const filtered = raw.filter(
+    (entry: unknown): entry is string => typeof entry === "string" && entry.trim().length > 0,
+  );
+  return filtered.length > 0 ? filtered : undefined;
+}
+
 function resolveFirecrawlConfig(fetch?: WebFetchConfig): FirecrawlFetchConfig {
   if (!fetch || typeof fetch !== "object") {
     return undefined;
@@ -446,6 +460,7 @@ type WebFetchRuntimeParams = FirecrawlRuntimeParams & {
   cacheTtlMs: number;
   userAgent: string;
   readabilityEnabled: boolean;
+  domainAllowlist?: string[];
 };
 
 function toFirecrawlContentParams(
@@ -518,6 +533,13 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
     throw new Error("Invalid URL: must be http or https");
   }
 
+  // SECURITY: Audit-log every outbound fetch URL for exfiltration detection.
+  logDebug(`[web-fetch] outbound request: ${parsedUrl.origin}${parsedUrl.pathname}`);
+
+  if (params.domainAllowlist?.length) {
+    logDebug(`[web-fetch] domain allowlist active: ${params.domainAllowlist.length} entries`);
+  }
+
   const start = Date.now();
   let res: Response;
   let release: (() => Promise<void>) | null = null;
@@ -527,6 +549,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
       url: params.url,
       maxRedirects: params.maxRedirects,
       timeoutMs: params.timeoutSeconds * 1000,
+      policy: params.domainAllowlist ? { hostnameAllowlist: params.domainAllowlist } : undefined,
       init: {
         headers: {
           Accept: "text/markdown, text/html;q=0.9, */*;q=0.1",
@@ -732,6 +755,7 @@ export function createWebFetchTool(options?: {
     (fetch && "userAgent" in fetch && typeof fetch.userAgent === "string" && fetch.userAgent) ||
     DEFAULT_FETCH_USER_AGENT;
   const maxResponseBytes = resolveFetchMaxResponseBytes(fetch);
+  const domainAllowlist = resolveFetchDomainAllowlist(fetch);
   return {
     label: "Web Fetch",
     name: "web_fetch",
@@ -766,6 +790,7 @@ export function createWebFetchTool(options?: {
         firecrawlProxy: "auto",
         firecrawlStoreInCache: true,
         firecrawlTimeoutSeconds,
+        domainAllowlist,
       });
       return jsonResult(result);
     },

@@ -27,7 +27,12 @@ export type SsrFPolicy = {
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
   "localhost.localdomain",
+  // Cloud provider metadata endpoints (SSRF targets for credential theft)
   "metadata.google.internal",
+  "metadata.google",
+  "169.254.169.254", // AWS, Azure, GCP fallback
+  "169.254.170.2", // AWS ECS task metadata
+  "fd00:ec2::254", // AWS IPv6 metadata
 ]);
 
 function normalizeHostnameSet(values?: string[]): Set<string> {
@@ -466,6 +471,14 @@ export type PinnedHostname = {
   lookup: typeof dnsLookupCb;
 };
 
+/**
+ * Resolve a hostname to IP addresses with SSRF policy enforcement.
+ *
+ * DNS rebinding protection: resolved addresses are pinned via createPinnedLookup()
+ * so the actual HTTP connection uses the same IPs that were validated here.
+ * This prevents TOCTOU attacks where a DNS response changes between validation
+ * and connection (L-AUTO-3).
+ */
 export async function resolvePinnedHostnameWithPolicy(
   hostname: string,
   params: { lookupFn?: LookupFn; policy?: SsrFPolicy } = {},

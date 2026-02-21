@@ -27,6 +27,7 @@ import {
   createFixedWindowRateLimiter,
   type FixedWindowRateLimiter,
 } from "../infra/fixed-window-rate-limit.js";
+import { DANGEROUS_ACP_TOOLS } from "../security/dangerous-tools.js";
 import { shortenHomePath } from "../utils.js";
 import { getAvailableCommands } from "./commands.js";
 import {
@@ -364,6 +365,24 @@ export class AcpGatewayAgent implements Agent {
       }
       pending.toolCalls.add(toolCallId);
       const args = data.args as Record<string, unknown> | undefined;
+
+      // SECURITY: Audit-log when a dangerous tool is invoked over ACP.
+      // The client-side (client.ts) already prompts the user for approval,
+      // but the server/translator side must also log these for defense-in-depth.
+      if (name && DANGEROUS_ACP_TOOLS.has(name)) {
+        const auditEntry = {
+          event: "dangerous_acp_tool_invoked",
+          timestamp: new Date().toISOString(),
+          tool: name,
+          toolCallId,
+          sessionKey,
+          sessionId: pending.sessionId,
+        };
+        this.log(
+          `[SECURITY AUDIT] dangerous tool "${name}" invoked over ACP: ${JSON.stringify(auditEntry)}`,
+        );
+      }
+
       await this.connection.sessionUpdate({
         sessionId: pending.sessionId,
         update: {

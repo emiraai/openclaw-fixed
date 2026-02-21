@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { type ExecHost, maxAsk, minSecurity, resolveSafeBins } from "../infra/exec-approvals.js";
 import { getTrustedSafeBinDirs } from "../infra/exec-safe-bin-trust.js";
+import { createFixedWindowRateLimiter } from "../infra/fixed-window-rate-limit.js";
 import {
   getShellPathFromLoginShell,
   resolveShellEnvFallbackTimeoutMs,
@@ -50,6 +51,74 @@ export type {
   ExecToolDefaults,
   ExecToolDetails,
 } from "./bash-tools.exec-types.js";
+
+/**
+ * SECURITY: Rate guard for elevated=full exec commands.
+ * Prevents unbounded elevated command execution within a short window.
+ * Uses the shared FixedWindowRateLimiter for thread-safe accounting.
+ */
+const elevatedFullRateLimiter = createFixedWindowRateLimiter({
+  maxRequests: 30,
+  windowMs: 60_000,
+});
+
+function checkElevatedFullRateGuard(): void {
+  const budget = elevatedFullRateLimiter.consume();
+  if (!budget.allowed) {
+    throw new Error(
+      `elevated=full rate limit exceeded (30 commands per 60s). ` +
+        `Retry after ${Math.ceil(budget.retryAfterMs / 1_000)}s.`,
+    );
+  }
+}
+
+// SECURITY: Block dangerous git operations that could cause data loss or supply chain attacks.
+// Elevated=full mode bypasses this check since the operator has explicitly opted in.
+const DANGEROUS_GIT_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /^git\s+push\s+.*(-f|--force)\b/,
+    reason: "Force-push can destroy remote history and cannot be undone",
+  },
+  {
+    pattern: /^git\s+push\s+.*--force-with-lease\b/,
+    reason: "Force-push (even with lease) can destroy remote history and cannot be undone",
+  },
+  {
+    pattern: /^git\s+config\s+--(global|system)\b/,
+    reason: "Global/system config changes persist beyond this session and affect all repositories",
+  },
+  {
+    pattern: /^git\s+remote\s+set-url\b/,
+    reason:
+      "Changing remote URLs is a supply chain risk - the origin could be redirected to an attacker-controlled repository",
+  },
+  {
+    pattern: /^git\s+remote\s+add\b/,
+    reason: "Adding remotes with unvetted URLs is a supply chain risk",
+  },
+];
+
+/**
+ * SECURITY: Validate that a git command does not include operations that could cause
+ * data loss or introduce supply chain risks. This check is skipped in elevated=full
+ * mode where the operator has explicitly opted in to unrestricted execution.
+ *
+ * Implements fix M-AUTO-4 + L-AUTO-4 from the security audit.
+ */
+function validateGitCommandSafety(command: string): void {
+  const trimmed = command.trim();
+  if (!trimmed.startsWith("git ")) {
+    return;
+  }
+  for (const { pattern, reason } of DANGEROUS_GIT_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      throw new Error(
+        `Blocked dangerous git operation: ${reason}. ` +
+          `If this operation is intentional, use elevated=full mode to bypass this restriction.`,
+      );
+    }
+  }
+}
 
 function extractScriptTargetFromCommand(
   command: string,
@@ -278,6 +347,21 @@ export function createExecTool(
       }
       if (elevatedRequested) {
         logInfo(`exec: elevated command ${truncateMiddle(params.command, 120)}`);
+        // SECURITY: Immutable audit trail for elevated commands — cannot be silenced by log level.
+        // This ensures every elevated=full execution leaves a trace even when ask="off".
+        if (elevatedMode === "full") {
+          const auditEntry = {
+            event: "elevated_exec_full",
+            timestamp: new Date().toISOString(),
+            command: truncateMiddle(params.command, 512),
+            sessionKey: defaults?.sessionKey ?? "unknown",
+            agentId: agentId ?? "unknown",
+            provider: defaults?.messageProvider ?? "unknown",
+          };
+          process.stderr.write(
+            `[SECURITY AUDIT] elevated=full exec bypass: ${JSON.stringify(auditEntry)}\n`,
+          );
+        }
       }
       const configuredHost = defaults?.host ?? "sandbox";
       const requestedHost = normalizeExecHost(params.host) ?? null;
@@ -290,12 +374,18 @@ export function createExecTool(
       }
       if (elevatedRequested) {
         host = "gateway";
+        // SECURITY: elevated commands bypass sandbox and run on the gateway host.
+        // Log this host escalation for audit visibility.
+        process.stderr.write(
+          `[SECURITY AUDIT] elevated exec forced host=gateway (was ${renderExecHostLabel(configuredHost)}), session=${defaults?.sessionKey ?? "unknown"}\n`,
+        );
       }
 
       const configuredSecurity = defaults?.security ?? (host === "sandbox" ? "deny" : "allowlist");
       const requestedSecurity = normalizeExecSecurity(params.security);
       let security = minSecurity(configuredSecurity, requestedSecurity ?? configuredSecurity);
       if (elevatedRequested && elevatedMode === "full") {
+        checkElevatedFullRateGuard();
         security = "full";
       }
       const configuredAsk = defaults?.ask ?? "on-miss";
@@ -411,6 +501,11 @@ export function createExecTool(
         typeof params.timeout === "number" ? params.timeout : defaultTimeoutSec;
       const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
       const usePty = params.pty === true && !sandbox;
+
+      // SECURITY: Block dangerous git operations before execution (fix M-AUTO-4 + L-AUTO-4).
+      if (!bypassApprovals) {
+        validateGitCommandSafety(params.command);
+      }
 
       // Preflight: catch a common model failure mode (shell syntax leaking into Python/JS sources)
       // before we execute and burn tokens in cron loops.

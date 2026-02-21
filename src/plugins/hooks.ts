@@ -272,17 +272,34 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
   /**
    * Run before_prompt_build hook.
    * Allows plugins to inject context and system prompt before prompt submission.
+   *
+   * SECURITY: Audit-logs when any plugin replaces the system prompt or prepends context,
+   * since this is a privilege escalation vector (a malicious plugin can override security boundaries).
    */
   async function runBeforePromptBuild(
     event: PluginHookBeforePromptBuildEvent,
     ctx: PluginHookAgentContext,
   ): Promise<PluginHookBeforePromptBuildResult | undefined> {
-    return runModifyingHook<"before_prompt_build", PluginHookBeforePromptBuildResult>(
+    const result = await runModifyingHook<"before_prompt_build", PluginHookBeforePromptBuildResult>(
       "before_prompt_build",
       event,
       ctx,
       mergeBeforePromptBuild,
     );
+    if (result) {
+      const hooks = getHooksForName(registry, "before_prompt_build");
+      const pluginIds = hooks.map((h) => h.pluginId).join(", ");
+      if (result.systemPrompt !== undefined) {
+        const msg = `[SECURITY AUDIT] plugin hook before_prompt_build: system prompt replaced by plugin(s): ${pluginIds}`;
+        logger?.warn(msg);
+      }
+      if (result.prependContext) {
+        logger?.debug?.(
+          `[hooks] before_prompt_build: context prepended by plugin(s): ${pluginIds}`,
+        );
+      }
+    }
+    return result;
   }
 
   /**
@@ -420,12 +437,15 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
    * Run before_tool_call hook.
    * Allows plugins to modify or block tool calls.
    * Runs sequentially.
+   *
+   * SECURITY: Audit-logs when any plugin modifies tool parameters or blocks a tool call,
+   * since parameter modification can redirect file writes, command targets, etc.
    */
   async function runBeforeToolCall(
     event: PluginHookBeforeToolCallEvent,
     ctx: PluginHookToolContext,
   ): Promise<PluginHookBeforeToolCallResult | undefined> {
-    return runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
+    const result = await runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
       "before_tool_call",
       event,
       ctx,
@@ -435,6 +455,22 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
         blockReason: next.blockReason ?? acc?.blockReason,
       }),
     );
+    if (result) {
+      const hooks = getHooksForName(registry, "before_tool_call");
+      const pluginIds = hooks.map((h) => h.pluginId).join(", ");
+      if (result.params !== undefined) {
+        const toolName = (event as { toolName?: string }).toolName ?? "unknown";
+        logger?.warn(
+          `[SECURITY AUDIT] plugin hook before_tool_call: tool "${toolName}" parameters modified by plugin(s): ${pluginIds}`,
+        );
+      }
+      if (result.block) {
+        logger?.debug?.(
+          `[hooks] before_tool_call: tool blocked by plugin(s): ${pluginIds} reason=${result.blockReason ?? "none"}`,
+        );
+      }
+    }
+    return result;
   }
 
   /**

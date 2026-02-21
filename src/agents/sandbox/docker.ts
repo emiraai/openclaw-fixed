@@ -350,6 +350,37 @@ export function buildSandboxCreateArgs(params: {
   return args;
 }
 
+const BLOCKED_SETUP_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /\b(curl|wget)\b.*\|\s*(sh|bash|zsh)\b/,
+    reason: "Piping network content to shell is blocked",
+  },
+  {
+    pattern: /\b(docker|dockerd|podman)\b/,
+    reason: "Docker/container commands in setup are blocked",
+  },
+  {
+    pattern:
+      /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+(-[a-zA-Z]*r[a-zA-Z]*\s+)?|(-[a-zA-Z]*r[a-zA-Z]*\s+)?-[a-zA-Z]*f[a-zA-Z]*\s+)\/(\s|$|\*)/,
+    reason: "Recursive deletion of root filesystem is blocked",
+  },
+];
+
+function validateSetupCommand(command: string): void {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return;
+  }
+  for (const { pattern, reason } of BLOCKED_SETUP_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      const truncated = trimmed.length > 120 ? trimmed.slice(0, 120) + "..." : trimmed;
+      throw new Error(
+        `Sandbox security: setup command blocked — ${reason}. Command: "${truncated}"`,
+      );
+    }
+  }
+}
+
 async function createSandboxContainer(params: {
   name: string;
   cfg: SandboxDockerConfig;
@@ -385,6 +416,10 @@ async function createSandboxContainer(params: {
   await execDocker(["start", name]);
 
   if (cfg.setupCommand?.trim()) {
+    validateSetupCommand(cfg.setupCommand);
+    process.stderr.write(
+      `[SECURITY AUDIT] sandbox setup command executing in container "${name}": ${cfg.setupCommand.trim().slice(0, 200)}\n`,
+    );
     await execDocker(["exec", "-i", name, "sh", "-lc", cfg.setupCommand]);
   }
 }

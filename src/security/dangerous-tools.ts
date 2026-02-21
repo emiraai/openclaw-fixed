@@ -18,6 +18,15 @@ export const DEFAULT_GATEWAY_HTTP_TOOL_DENY = [
 ] as const;
 
 /**
+ * SECURITY: Tools that can NEVER be re-enabled via gateway.tools.allow.
+ * These are effectively RCE over HTTP and must remain permanently denied.
+ */
+export const NON_OVERRIDABLE_GATEWAY_HTTP_DENY = new Set<string>([
+  "sessions_spawn",
+  "sessions_send",
+]);
+
+/**
  * ACP tools that should always require explicit user approval.
  * ACP is an automation surface; we never want "silent yes" for mutating/execution tools.
  */
