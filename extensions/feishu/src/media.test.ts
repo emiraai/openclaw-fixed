@@ -119,7 +119,7 @@ describe("sendMediaFeishu msg_type routing", () => {
     );
   });
 
-  it("uses msg_type=media for opus", async () => {
+  it("uses msg_type=audio for opus", async () => {
     await sendMediaFeishu({
       cfg: {} as any,
       to: "user:ou_target",
@@ -135,7 +135,7 @@ describe("sendMediaFeishu msg_type routing", () => {
 
     expect(messageCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ msg_type: "media" }),
+        data: expect.objectContaining({ msg_type: "audio" }),
       }),
     );
   });
