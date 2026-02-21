@@ -31,6 +31,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Agents/Bootstrap: skip bootstrap files with undefined path instead of crashing all agents with TypeError. Hooks pushing objects with filePath instead of path no longer take down every session. (#22693) Thanks @arosstale.
 - Security/Agents: cap embedded Pi runner outer retry loop to 24 attempts and return an explicit `retry_limit` error payload when retries never converge, preventing unbounded internal retry cycles (`GHSA-76m6-pj3w-v7mf`).
 - Agents/Tool images: include source filenames in `agents/tool-images` resize logs so compression events can be traced back to specific files.
 - Providers/OAuth: harden Qwen and Chutes refresh handling by validating refresh response expiry values and preserving prior refresh tokens when providers return empty refresh token fields, with regression coverage for empty-token responses.
