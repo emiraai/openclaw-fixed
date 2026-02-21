@@ -1,0 +1,37 @@
+{
+  "id": "agent-resilience",
+  "kind": "agent",
+  "name": "Agent Resilience",
+  "description": "Timeout/unknown retry with backoff, and automatic image stripping on empty model response",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "retryMaxRounds": {
+        "type": "number",
+        "default": 2,
+        "description": "Max retry rounds when all providers fail with retryable errors"
+      },
+      "retryBaseDelayMs": {
+        "type": "number",
+        "default": 15000,
+        "description": "Base delay for retry backoff (actual = base × 2^round)"
+      },
+      "retryMaxDelayMs": {
+        "type": "number",
+        "default": 60000,
+        "description": "Hard ceiling for any single retry delay"
+      },
+      "imageStripEnabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Auto-strip images from context when model returns empty response"
+      },
+      "imageStripPersist": {
+        "type": "boolean",
+        "default": true,
+        "description": "Also strip images from persisted session file"
+      }
+    }
+  }
+}
