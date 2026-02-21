@@ -354,6 +354,28 @@ export function normalizeGoogleModelId(id: string): string {
   return id;
 }
 
+/**
+ * Normalize the `api` field for a provider based on provider identity.
+ * The pi-ai library incorrectly assigns `api: "google-gemini-cli"` to
+ * google-antigravity models; this corrects that mismatch.
+ *
+ * Note: The "google-antigravity" value is valid for pi-ai's Api type
+ * but not in OpenClaw's narrower ModelApi type, hence string return.
+ */
+export function normalizeProviderApi(
+  providerKey: string,
+  api: string | undefined,
+): string | undefined {
+  if (!api) {
+    return api;
+  }
+  // google-antigravity must use api: "google-antigravity", not "google-gemini-cli"
+  if (providerKey === "google-antigravity" && api !== "google-antigravity") {
+    return "google-antigravity";
+  }
+  return api;
+}
+
 function normalizeGoogleProvider(provider: ProviderConfig): ProviderConfig {
   let mutated = false;
   const models = provider.models.map((model) => {
@@ -384,6 +406,9 @@ export function normalizeProviders(params: {
   for (const [key, provider] of Object.entries(providers)) {
     const normalizedKey = key.trim();
     let normalizedProvider = provider;
+    if (normalizedKey !== key) {
+      mutated = true;
+    }
 
     // Fix common misconfig: apiKey set to "${ENV_VAR}" instead of "ENV_VAR".
     if (
@@ -430,7 +455,18 @@ export function normalizeProviders(params: {
       normalizedProvider = googleNormalized;
     }
 
-    next[key] = normalizedProvider;
+    // Normalize api field based on provider identity (fixes pi-ai library mismatch).
+    // Cast needed because "google-antigravity" is valid for pi-ai but not in OpenClaw's ModelApi type.
+    const normalizedApi = normalizeProviderApi(normalizedKey, normalizedProvider.api as string);
+    if (normalizedApi !== normalizedProvider.api) {
+      mutated = true;
+      normalizedProvider = {
+        ...normalizedProvider,
+        api: normalizedApi as typeof normalizedProvider.api,
+      };
+    }
+
+    next[normalizedKey] = normalizedProvider;
   }
 
   return mutated ? next : providers;
