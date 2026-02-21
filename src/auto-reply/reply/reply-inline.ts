@@ -15,6 +15,7 @@ export function extractInlineSimpleCommand(body?: string): {
   if (!body) {
     return null;
   }
+
   const match = body.match(INLINE_SIMPLE_COMMAND_RE);
   if (!match || match.index === undefined) {
     return null;
