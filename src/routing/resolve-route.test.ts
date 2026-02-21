@@ -684,4 +684,53 @@ describe("role-based agent routing", () => {
       expectedMatchedBy: "binding.guild+roles",
     });
   });
+
+  test('normalizes input peer.kind "dm" to "direct" for binding match (#22730)', () => {
+    const cfg: OpenClawConfig = {
+      bindings: [
+        {
+          agentId: "alice-agent",
+          match: {
+            channel: "qqbot",
+            peer: { kind: "direct", id: "1234567890" },
+          },
+        },
+      ],
+    };
+
+    // QQ plugin sends "dm" but binding uses "direct"
+    const route = resolveAgentRoute({
+      cfg,
+      channel: "qqbot",
+      peer: { kind: "dm" as ChatType, id: "1234567890" },
+    });
+
+    expect(route.agentId).toBe("alice-agent");
+    expect(route.matchedBy).toBe("binding.peer");
+  });
+
+  test('normalizes parentPeer.kind "dm" to "direct" for thread parent binding match', () => {
+    const cfg: OpenClawConfig = {
+      bindings: [
+        {
+          agentId: "parent-agent",
+          match: {
+            channel: "qqbot",
+            peer: { kind: "direct", id: "parent-1234" },
+          },
+        },
+      ],
+    };
+
+    // Thread with parent using "dm" should still match binding with "direct"
+    const route = resolveAgentRoute({
+      cfg,
+      channel: "qqbot",
+      peer: { kind: "direct", id: "thread-5678" },
+      parentPeer: { kind: "dm" as ChatType, id: "parent-1234" },
+    });
+
+    expect(route.agentId).toBe("parent-agent");
+    expect(route.matchedBy).toBe("binding.peer.parent");
+  });
 });
