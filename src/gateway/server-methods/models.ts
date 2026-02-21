@@ -34,7 +34,7 @@ export const modelsHandlers: GatewayRequestHandlers = {
     }
   },
 
-  "models.addProvider": async ({ params, respond, context }) => {
+  "models.addProvider": async ({ params, respond, context: _context }) => {
     if (!validateModelsAddProviderParams(params)) {
       respond(
         false,

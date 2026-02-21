@@ -5,15 +5,13 @@ import {
   matchesKey,
   truncateToWidth,
   visibleWidth,
+  type SelectItem,
 } from "@mariozechner/pi-tui";
 import chalk from "chalk";
-import type { ChatLog } from "./chat-log.js";
 import { theme } from "../theme/theme.js";
-import { searchableSelectListTheme, type SelectItem } from "./searchable-select-list.js";
+import type { ChatLog } from "./chat-log.js";
 
 const DEFAULT_BASE_URL = "https://api.example.com/v1";
-const DEFAULT_CONTEXT_WINDOW = 256_000;
-const DEFAULT_MAX_TOKENS = 256_000;
 
 // Color helpers
 const palette = {
@@ -60,16 +58,16 @@ const COMPATIBILITY_OPTIONS: Array<SelectItem & { value: CompatibilityMode }> = 
   { value: "anthropic", label: "Anthropic-compatible", description: "Uses /messages" },
 ];
 
-const YES_NO_OPTIONS: Array<SelectItem & { value: boolean }> = [
-  { value: true, label: "Yes", description: "Verify endpoint before adding (recommended)" },
-  { value: false, label: "No", description: "Skip verification and add directly" },
+const YES_NO_OPTIONS: Array<SelectItem & { value: string }> = [
+  { value: "yes", label: "Yes", description: "Verify endpoint before adding (recommended)" },
+  { value: "no", label: "No", description: "Skip verification and add directly" },
 ];
 
 export class AddProviderWizard implements Component {
   private state: WizardState;
   private input: Input;
   private chatLog: ChatLog;
-  private onSelect?: (result: {
+  public onSelect?: (result: {
     baseUrl: string;
     apiKey: string;
     api: "openai-completions" | "anthropic-messages";
@@ -77,7 +75,7 @@ export class AddProviderWizard implements Component {
     modelId: string;
     alias: string;
   }) => void;
-  private onCancel?: () => void;
+  public onCancel?: () => void;
   private selectedIndex = 0;
 
   constructor(chatLog: ChatLog) {
@@ -106,6 +104,7 @@ export class AddProviderWizard implements Component {
       modelId: "Model ID",
       providerId: "Provider ID",
       alias: "Model Alias (optional, press Enter to skip)",
+      shouldVerify: "Verify endpoint?",
       verify: "Verifying...",
       done: "Done",
     };
@@ -120,6 +119,7 @@ export class AddProviderWizard implements Component {
       modelId: "e.g. gpt-4, claude-3-sonnet",
       providerId: "auto-generated from URL",
       alias: "e.g. local, ollama, my-model",
+      shouldVerify: "",
       verify: "",
       done: "",
     };
@@ -222,7 +222,7 @@ export class AddProviderWizard implements Component {
     return lines;
   }
 
-  private renderInputStep(width: number): string {
+  private renderInputStep(_width: number): string {
     const inputValue = this.input.getValue();
     const displayValue = inputValue || this.formatPlaceholder();
     const promptWidth = 52;
@@ -240,7 +240,7 @@ export class AddProviderWizard implements Component {
     return `${prefix}${valueDisplay}${padding} ${fg(palette.border)("│")}`;
   }
 
-  private renderCompatibilityStep(width: number): string[] {
+  private renderCompatibilityStep(_width: number): string[] {
     const lines: string[] = [];
     for (let i = 0; i < COMPATIBILITY_OPTIONS.length; i++) {
       const option = COMPATIBILITY_OPTIONS[i];
@@ -258,7 +258,7 @@ export class AddProviderWizard implements Component {
     return lines;
   }
 
-  private renderShouldVerifyStep(width: number): string[] {
+  private renderShouldVerifyStep(_width: number): string[] {
     const lines: string[] = [];
     lines.push(
       `${fg(palette.border)("│")} ${"Verify endpoint before adding?".padEnd(50)}${fg(palette.border)("│")}`,
@@ -424,7 +424,7 @@ export class AddProviderWizard implements Component {
       }
 
       case "shouldVerify": {
-        const shouldVerify = YES_NO_OPTIONS[this.selectedIndex].value;
+        const shouldVerify = YES_NO_OPTIONS[this.selectedIndex].value === "yes";
         this.state.skipVerify = !shouldVerify;
 
         if (!shouldVerify) {
@@ -529,7 +529,7 @@ export class AddProviderWizard implements Component {
     this.state.error = undefined;
   }
 
-  private handleInput(keyData: string): void {
+  public handleInput(keyData: string): void {
     if (isKeyRelease(keyData)) {
       return;
     }
