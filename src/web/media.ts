@@ -32,6 +32,8 @@ type WebMediaOptions = {
   /** Caller already validated the local path (sandbox/other guards); requires readFile override. */
   sandboxValidated?: boolean;
   readFile?: (filePath: string) => Promise<Buffer>;
+  /** Base directory for resolving relative media paths (typically the agent workspace). */
+  cwd?: string;
 };
 
 export type LocalMediaAccessErrorCode =
@@ -60,17 +62,26 @@ export function getDefaultLocalRoots(): readonly string[] {
 async function assertLocalMediaAllowed(
   mediaPath: string,
   localRoots: readonly string[] | "any" | undefined,
+  /** Base directory for resolving relative paths (defaults to process.cwd()). */
+  cwd?: string,
 ): Promise<void> {
   if (localRoots === "any") {
     return;
   }
   const roots = localRoots ?? getDefaultLocalRoots();
+  // Resolve relative paths against the provided cwd (typically the agent
+  // workspace) so that relative media references like "downloads/file.pdf"
+  // are matched against the workspace root in the allowed roots list.
+  const absolutePath = path.isAbsolute(mediaPath)
+    ? mediaPath
+    : path.resolve(cwd ?? process.cwd(), mediaPath);
+
   // Resolve symlinks so a symlink under /tmp pointing to /etc/passwd is caught.
   let resolved: string;
   try {
-    resolved = await fs.realpath(mediaPath);
+    resolved = await fs.realpath(absolutePath);
   } catch {
-    resolved = path.resolve(mediaPath);
+    resolved = absolutePath;
   }
 
   // Hardening: the default allowlist includes the OpenClaw temp dir, and tests/CI may
@@ -330,7 +341,7 @@ async function loadWebMediaInternal(
 
   // Guard local reads against allowed directory roots to prevent file exfiltration.
   if (!(sandboxValidated || localRoots === "any")) {
-    await assertLocalMediaAllowed(mediaUrl, localRoots);
+    await assertLocalMediaAllowed(mediaUrl, localRoots, options?.cwd);
   }
 
   // Local path
@@ -486,3 +497,4 @@ export async function optimizeImageToJpeg(
 }
 
 export { optimizeImageToPng };
+wN��n�ӝ5�F��<��������8�_ӟ=
