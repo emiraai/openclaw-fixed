@@ -235,6 +235,10 @@ export const FIELD_HELP: Record<string, string> = {
   memory: "Memory backend configuration (global).",
   "memory.backend": 'Memory backend ("builtin" for OpenClaw embeddings, "qmd" for QMD sidecar).',
   "memory.citations": 'Default citation behavior ("auto", "on", or "off").',
+  "memory.limits.maxSearchInjectedTokens":
+    "Max tokens injected into the model context from memory_search results (default: 800).",
+  "memory.limits.maxGetInjectedTokens":
+    "Max tokens injected into the model context from memory_get reads (default: 1600).",
   "memory.qmd.command": "Path to the qmd binary (default: resolves from PATH).",
   "memory.qmd.includeDefaultMemory":
     "Whether to automatically index MEMORY.md + memory/**/*.md (default: true).",

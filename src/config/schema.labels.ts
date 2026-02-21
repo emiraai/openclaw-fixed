@@ -176,6 +176,8 @@ export const FIELD_LABELS: Record<string, string> = {
   memory: "Memory",
   "memory.backend": "Memory Backend",
   "memory.citations": "Memory Citations Mode",
+  "memory.limits.maxSearchInjectedTokens": "Memory Search Max Injected Tokens",
+  "memory.limits.maxGetInjectedTokens": "Memory Get Max Injected Tokens",
   "memory.qmd.command": "QMD Binary",
   "memory.qmd.includeDefaultMemory": "QMD Include Default Memory",
   "memory.qmd.paths": "QMD Extra Paths",
