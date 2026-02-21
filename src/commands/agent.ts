@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   listAgentIds,
   resolveAgentDir,
@@ -507,6 +508,7 @@ export async function agentCommand(
     }
     const sessionFile = resolveSessionFilePath(sessionId, sessionEntry, {
       agentId: sessionAgentId,
+      sessionsDir: path.dirname(storePath),
     });
 
     const startedAt = Date.now();
