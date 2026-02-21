@@ -1,0 +1,20 @@
+{
+  "id": "events",
+  "name": "Events",
+  "description": "Search nearby events via Ticketmaster Discovery API",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["apiKey"],
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "Ticketmaster Discovery API key"
+      },
+      "defaultLocation": {
+        "type": "string",
+        "description": "Default city for event searches (e.g. \"Miami\")"
+      }
+    }
+  }
+}
