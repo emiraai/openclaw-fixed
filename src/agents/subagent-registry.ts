@@ -109,6 +109,7 @@ function startSubagentAnnounceCleanupFlow(runId: string, entry: SubagentRunRecor
     startedAt: entry.startedAt,
     endedAt: entry.endedAt,
     label: entry.label,
+    model: entry.model,
     outcome: entry.outcome,
   }).then((didAnnounce) => {
     finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
