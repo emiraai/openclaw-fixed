@@ -1,0 +1,15 @@
+{
+  "gateway": {
+    "auth": {
+      "mode": "token",
+      "token": "davidbogdanemira2026"
+    },
+    "port": 18789,
+    "bind": "0.0.0.0"
+  },
+  "hooks": {
+    "enabled": true,
+    "token": "davidbogdanemira2026",
+    "path": "/hooks"
+  }
+}
