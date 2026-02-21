@@ -30,6 +30,7 @@ export type ApplyAuthChoiceParams = {
     cloudflareAiGatewayGatewayId?: string;
     cloudflareAiGatewayApiKey?: string;
     xaiApiKey?: string;
+    apertisApiKey?: string;
   };
 };
 
