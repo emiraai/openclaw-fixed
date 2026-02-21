@@ -21,6 +21,7 @@ type OnboardProviderAuthOptionKey = keyof Pick<
   | "xaiApiKey"
   | "litellmApiKey"
   | "qianfanApiKey"
+  | "edgeeApiKey"
 >;
 
 export type OnboardProviderAuthFlag = {
@@ -165,5 +166,12 @@ export const ONBOARD_PROVIDER_AUTH_FLAGS: ReadonlyArray<OnboardProviderAuthFlag>
     cliFlag: "--qianfan-api-key",
     cliOption: "--qianfan-api-key <key>",
     description: "QIANFAN API key",
+  },
+  {
+    optionKey: "edgeeApiKey",
+    authChoice: "edgee-api-key",
+    cliFlag: "--edgee-api-key",
+    cliOption: "--edgee-api-key <key>",
+    description: "Edgee API key",
   },
 ];
