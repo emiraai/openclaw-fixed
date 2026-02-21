@@ -34,6 +34,7 @@ export type MonitorSignalOpts = {
   cliPath?: string;
   httpHost?: string;
   httpPort?: number;
+  receivePollTimeoutSeconds?: number;
   receiveMode?: "on-start" | "manual";
   ignoreAttachments?: boolean;
   ignoreStories?: boolean;
@@ -263,6 +264,11 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   const chunkMode = resolveChunkMode(cfg, "signal", accountInfo.accountId);
   const baseUrl = opts.baseUrl?.trim() || accountInfo.baseUrl;
   const account = opts.account?.trim() || accountInfo.config.account?.trim();
+  const configReceivePollTimeoutSeconds = (
+    accountInfo.config as { receivePollTimeoutSeconds?: number }
+  ).receivePollTimeoutSeconds;
+  const receivePollTimeoutSeconds =
+    opts.receivePollTimeoutSeconds ?? configReceivePollTimeoutSeconds;
   const dmPolicy = accountInfo.config.dmPolicy ?? "pairing";
   const allowFrom = normalizeAllowList(opts.allowFrom ?? accountInfo.config.allowFrom);
   const groupAllowFrom = normalizeAllowList(
@@ -353,12 +359,15 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     await runSignalSseLoop({
       baseUrl,
       account,
+      receivePollTimeoutSeconds,
       abortSignal: opts.abortSignal,
       runtime,
-      onEvent: (event) => {
-        void handleEvent(event).catch((err) => {
+      onEvent: async (event) => {
+        try {
+          await handleEvent(event);
+        } catch (err) {
           runtime.error?.(`event handler failed: ${String(err)}`);
-        });
+        }
       },
     });
   } catch (err) {
