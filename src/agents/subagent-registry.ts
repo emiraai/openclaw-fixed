@@ -756,7 +756,7 @@ export function markSubagentRunTerminated(params: {
 }
 
 export function listSubagentRunsForRequester(requesterSessionKey: string): SubagentRunRecord[] {
-  const key = requesterSessionKey.trim();
+  const key = (requesterSessionKey ?? "").trim();
   if (!key) {
     return [];
   }
@@ -764,7 +764,7 @@ export function listSubagentRunsForRequester(requesterSessionKey: string): Subag
 }
 
 export function countActiveRunsForSession(requesterSessionKey: string): number {
-  const key = requesterSessionKey.trim();
+  const key = (requesterSessionKey ?? "").trim();
   if (!key) {
     return 0;
   }
