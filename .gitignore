@@ -86,6 +86,10 @@ USER.md
 # local tooling
 .serena/
 
+# Test fixtures with credentials (NEVER COMMIT)
+tests/model-optimizer/_config-fix.json
+_config-fix*.json
+
 # Agent credentials and memory (NEVER COMMIT)
 /memory/
 .agent/*.json
