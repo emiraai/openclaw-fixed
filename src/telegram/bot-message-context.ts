@@ -177,7 +177,6 @@ export const buildTelegramMessageContext = async ({
   const { groupConfig, topicConfig } = resolveTelegramGroupConfig(chatId, resolvedThreadId);
   const peerId = isGroup ? buildTelegramGroupPeerId(chatId, resolvedThreadId) : String(chatId);
   const parentPeer = buildTelegramParentPeer({ isGroup, resolvedThreadId, chatId });
-  // Fresh config for bindings lookup; other routing inputs are payload-derived.
   const route = resolveAgentRoute({
     cfg: loadConfig(),
     channel: "telegram",
@@ -189,13 +188,17 @@ export const buildTelegramMessageContext = async ({
     parentPeer,
   });
   const baseSessionKey = route.sessionKey;
-  // DMs: use raw messageThreadId for thread sessions (not forum topic ids)
   const dmThreadId = threadSpec.scope === "dm" ? threadSpec.id : undefined;
   const threadKeys =
     dmThreadId != null
       ? resolveThreadSessionKeys({ baseSessionKey, threadId: String(dmThreadId) })
       : null;
-  const sessionKey = threadKeys?.sessionKey ?? baseSessionKey;
+  const forumTopicThreadId = threadSpec.scope === "forum" ? threadSpec.id : undefined;
+  const forumThreadKeys =
+    forumTopicThreadId != null
+      ? resolveThreadSessionKeys({ baseSessionKey, threadId: String(forumTopicThreadId) })
+      : null;
+  const sessionKey = forumThreadKeys?.sessionKey ?? threadKeys?.sessionKey ?? baseSessionKey;
   const mentionRegexes = buildMentionRegexes(cfg, route.agentId);
   const effectiveDmAllow = normalizeAllowFromWithStore({ allowFrom, storeAllowFrom });
   const groupAllowOverride = firstDefined(topicConfig?.allowFrom, groupConfig?.allowFrom);
@@ -232,7 +235,6 @@ export const buildTelegramMessageContext = async ({
     return null;
   }
 
-  // Compute requireMention early for preflight transcription gating
   const activationOverride = resolveGroupActivation({
     chatId,
     messageThreadId: resolvedThreadId,
@@ -266,7 +268,6 @@ export const buildTelegramMessageContext = async ({
     }
   };
 
-  // DM access control (secure defaults): "pairing" (default) / "allowlist" / "open" / "disabled"
   if (!isGroup) {
     if (dmPolicy === "disabled") {
       return null;
@@ -369,14 +370,12 @@ export const buildTelegramMessageContext = async ({
 
   let placeholder = resolveTelegramMediaPlaceholder(msg) ?? "";
 
-  // Check if sticker has a cached description - if so, use it instead of sending the image
   const cachedStickerDescription = allMedia[0]?.stickerMetadata?.cachedDescription;
   const stickerSupportsVision = msg.sticker
     ? await resolveStickerVisionSupport({ cfg, agentId: route.agentId })
     : false;
   const stickerCacheHit = Boolean(cachedStickerDescription) && !stickerSupportsVision;
   if (stickerCacheHit) {
-    // Format cached description with sticker context
     const emoji = allMedia[0]?.stickerMetadata?.emoji;
     const setName = allMedia[0]?.stickerMetadata?.setName;
     const stickerContext = [emoji, setName ? `from "${setName}"` : null].filter(Boolean).join(" ");
@@ -399,8 +398,6 @@ export const buildTelegramMessageContext = async ({
   let bodyText = rawBody;
   const hasAudio = allMedia.some((media) => media.contentType?.startsWith("audio/"));
 
-  // Preflight audio transcription for mention detection in groups
-  // This allows voice notes to be checked for mentions before being dropped
   let preflightTranscript: string | undefined;
   const needsPreflightTranscription =
     isGroup && requireMention && hasAudio && !hasUserText && mentionRegexes.length > 0;
@@ -408,7 +405,6 @@ export const buildTelegramMessageContext = async ({
   if (needsPreflightTranscription) {
     try {
       const { transcribeFirstAudio } = await import("../media-understanding/audio-preflight.js");
-      // Build a minimal context for transcription
       const tempCtx: MsgContext = {
         MediaPaths: allMedia.length > 0 ? allMedia.map((m) => m.path) : undefined,
         MediaTypes:
@@ -426,12 +422,10 @@ export const buildTelegramMessageContext = async ({
     }
   }
 
-  // Replace audio placeholder with transcript when preflight succeeds.
   if (hasAudio && bodyText === "<media:audio>" && preflightTranscript) {
     bodyText = preflightTranscript;
   }
 
-  // Build bodyText fallback for messages that still have no text.
   if (!bodyText && allMedia.length > 0) {
     if (hasAudio) {
       bodyText = preflightTranscript || "<media:audio>";
@@ -465,7 +459,6 @@ export const buildTelegramMessageContext = async ({
     });
     return null;
   }
-  // Reply-chain detection: replying to a bot message acts like an implicit mention.
   const botId = primaryCtx.me?.id;
   const replyFromId = msg.reply_to_message?.from?.id;
   const implicitMention = botId != null && replyFromId === botId;
@@ -502,7 +495,6 @@ export const buildTelegramMessageContext = async ({
     }
   }
 
-  // ACK reactions
   const ackReaction = resolveAckReaction(cfg, route.agentId, {
     channel: "telegram",
     accountId: account.accountId,
@@ -692,7 +684,6 @@ export const buildTelegramMessageContext = async ({
       : undefined;
   const ctxPayload = finalizeInboundContext({
     Body: combinedBody,
-    // Agent prompt should be the raw user text only; metadata/context is provided via system prompt.
     BodyForAgent: bodyText,
     InboundHistory: inboundHistory,
     RawBody: rawBody,
@@ -726,7 +717,6 @@ export const buildTelegramMessageContext = async ({
     ForwardedDate: forwardOrigin?.date ? forwardOrigin.date * 1000 : undefined,
     Timestamp: msg.date ? msg.date * 1000 : undefined,
     WasMentioned: isGroup ? effectiveWasMentioned : undefined,
-    // Filter out cached stickers from media - their description is already in the message body
     MediaPath: stickerCacheHit ? undefined : allMedia[0]?.path,
     MediaType: stickerCacheHit ? undefined : allMedia[0]?.contentType,
     MediaUrl: stickerCacheHit ? undefined : allMedia[0]?.path,
@@ -748,10 +738,8 @@ export const buildTelegramMessageContext = async ({
     Sticker: allMedia[0]?.stickerMetadata,
     ...(locationData ? toLocationContext(locationData) : undefined),
     CommandAuthorized: commandAuthorized,
-    // For groups: use resolved forum topic id; for DMs: use raw messageThreadId
     MessageThreadId: threadSpec.id,
     IsForum: isForum,
-    // Originating channel for reply routing.
     OriginatingChannel: "telegram" as const,
     OriginatingTo: `telegram:${chatId}`,
   });
@@ -766,7 +754,6 @@ export const buildTelegramMessageContext = async ({
           channel: "telegram",
           to: String(chatId),
           accountId: route.accountId,
-          // Preserve DM topic threadId for replies (fixes #8891)
           threadId: dmThreadId != null ? String(dmThreadId) : undefined,
         }
       : undefined,
