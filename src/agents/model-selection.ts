@@ -2,7 +2,7 @@ import type { OpenClawConfig } from "../config/config.js";
 import { resolveAgentConfig, resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
-import { normalizeGoogleModelId } from "./models-config.providers.js";
+import { normalizeAntigravityModelId, normalizeGoogleModelId } from "./models-config.providers.js";
 
 export type ModelRef = {
   provider: string;
@@ -107,6 +107,9 @@ function normalizeProviderModelId(provider: string, model: string): string {
   }
   if (provider === "google") {
     return normalizeGoogleModelId(model);
+  }
+  if (provider === "google-antigravity") {
+    return normalizeAntigravityModelId(model);
   }
   return model;
 }
