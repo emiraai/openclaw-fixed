@@ -118,6 +118,143 @@ const STOP_WORDS_EN = new Set([
   "give",
 ]);
 
+const STOP_WORDS_KO = new Set([
+  // Particles (조사)
+  "은",
+  "는",
+  "이",
+  "가",
+  "을",
+  "를",
+  "의",
+  "에",
+  "에서",
+  "로",
+  "으로",
+  "와",
+  "과",
+  "도",
+  "만",
+  "까지",
+  "부터",
+  "한테",
+  "에게",
+  "께",
+  "처럼",
+  "같이",
+  "보다",
+  "마다",
+  "밖에",
+  "대로",
+  // Pronouns (대명사)
+  "나",
+  "나는",
+  "내가",
+  "나를",
+  "너",
+  "우리",
+  "저",
+  "저희",
+  "그",
+  "그녀",
+  "그들",
+  "이것",
+  "저것",
+  "그것",
+  "여기",
+  "저기",
+  "거기",
+  // Common verbs / auxiliaries (일반 동사/보조 동사)
+  "있다",
+  "없다",
+  "하다",
+  "되다",
+  "이다",
+  "아니다",
+  "보다",
+  "주다",
+  "오다",
+  "가다",
+  // Nouns (의존 명사 / vague)
+  "것",
+  "거",
+  "등",
+  "수",
+  "때",
+  "곳",
+  "중",
+  "분",
+  // Adverbs
+  "잘",
+  "더",
+  "또",
+  "매우",
+  "정말",
+  "아주",
+  "많이",
+  "너무",
+  "좀",
+  // Conjunctions
+  "그리고",
+  "하지만",
+  "그래서",
+  "그런데",
+  "그러나",
+  "또는",
+  "그러면",
+  // Question words
+  "왜",
+  "어떻게",
+  "뭐",
+  "언제",
+  "어디",
+  "누구",
+  "무엇",
+  "어떤",
+  // Time (vague)
+  "어제",
+  "오늘",
+  "내일",
+  "최근",
+  "지금",
+  "아까",
+  "나중",
+  "전에",
+  // Request words
+  "제발",
+  "부탁",
+]);
+
+// Common Korean trailing particles to strip from words for tokenization
+// Sorted by descending length so longest-match-first is guaranteed.
+const KO_TRAILING_PARTICLES = [
+  "에서",
+  "으로",
+  "에게",
+  "한테",
+  "처럼",
+  "같이",
+  "보다",
+  "까지",
+  "부터",
+  "마다",
+  "밖에",
+  "대로",
+  "은",
+  "는",
+  "이",
+  "가",
+  "을",
+  "를",
+  "의",
+  "에",
+  "로",
+  "와",
+  "과",
+  "도",
+  "만",
+].toSorted((a, b) => b.length - a.length);
+
 const STOP_WORDS_ZH = new Set([
   // Pronouns
   "我",
@@ -252,7 +389,7 @@ function tokenize(text: string): string[] {
   const segments = normalized.split(/[\s\p{P}]+/u).filter(Boolean);
 
   for (const segment of segments) {
-    // Check if segment contains CJK characters
+    // Check if segment contains CJK characters (Chinese)
     if (/[\u4e00-\u9fff]/.test(segment)) {
       // For Chinese, extract character n-grams (unigrams and bigrams)
       const chars = Array.from(segment).filter((c) => /[\u4e00-\u9fff]/.test(c));
@@ -261,6 +398,21 @@ function tokenize(text: string): string[] {
       // Add bigrams for better phrase matching
       for (let i = 0; i < chars.length - 1; i++) {
         tokens.push(chars[i] + chars[i + 1]);
+      }
+    } else if (/[\uac00-\ud7af\u3131-\u3163]/.test(segment)) {
+      // For Korean (Hangul syllables and jamo), keep the word as-is
+      tokens.push(segment);
+      // Also try stripping common trailing particles to get the stem
+      for (const particle of KO_TRAILING_PARTICLES) {
+        if (segment.length > particle.length && segment.endsWith(particle)) {
+          const stem = segment.slice(0, -particle.length);
+          // Require at least 2 Hangul chars to avoid bogus single-char stems
+          // (e.g. "논의" should not produce "논" by stripping "의")
+          if (stem.length >= 2 && /[\uac00-\ud7af]/.test(stem)) {
+            tokens.push(stem);
+          }
+          break; // Only strip the first (longest) matching particle
+        }
       }
     } else {
       // For non-CJK, keep as single token
@@ -285,9 +437,25 @@ export function extractKeywords(query: string): string[] {
   const seen = new Set<string>();
 
   for (const token of tokens) {
-    // Skip stop words
-    if (STOP_WORDS_EN.has(token) || STOP_WORDS_ZH.has(token)) {
+    // Skip stop words (checks both raw token and any particle-stripped form)
+    if (STOP_WORDS_EN.has(token) || STOP_WORDS_ZH.has(token) || STOP_WORDS_KO.has(token)) {
       continue;
+    }
+    // For Korean tokens, also check if stripping particles yields a stop word
+    if (/[\uac00-\ud7af]/.test(token)) {
+      let isStop = false;
+      for (const particle of KO_TRAILING_PARTICLES) {
+        if (token.length > particle.length && token.endsWith(particle)) {
+          const stem = token.slice(0, -particle.length);
+          if (STOP_WORDS_KO.has(stem)) {
+            isStop = true;
+          }
+          break;
+        }
+      }
+      if (isStop) {
+        continue;
+      }
     }
     // Skip invalid keywords
     if (!isValidKeyword(token)) {
