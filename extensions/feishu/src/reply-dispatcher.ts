@@ -8,10 +8,11 @@ import {
 } from "openclaw/plugin-sdk";
 import { resolveFeishuAccount } from "./accounts.js";
 import { createFeishuClient } from "./client.js";
+import { sendMediaFeishu } from "./media.js";
 import type { MentionTarget } from "./mention.js";
 import { buildMentionedCardContent } from "./mention.js";
 import { getFeishuRuntime } from "./runtime.js";
-import { sendMarkdownCardFeishu, sendMessageFeishu } from "./send.js";
+import { sendCaptionCardFeishu, sendMarkdownCardFeishu, sendMessageFeishu } from "./send.js";
 import { FeishuStreamingSession } from "./streaming-card.js";
 import { resolveReceiveIdType } from "./targets.js";
 import { addTypingIndicator, removeTypingIndicator, type TypingIndicatorState } from "./typing.js";
@@ -125,6 +126,62 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
     lastPartial = "";
   };
 
+  /** Send text via streaming, card, or plain message. Returns true if streaming handled it. */
+  const sendTextPayload = async (
+    text: string,
+    info: { kind?: string } | undefined,
+  ): Promise<boolean> => {
+    const useCard = renderMode === "card" || (renderMode === "auto" && shouldUseCard(text));
+
+    if ((info?.kind === "block" || info?.kind === "final") && streamingEnabled && useCard) {
+      startStreaming();
+      if (streamingStartPromise) {
+        await streamingStartPromise;
+      }
+    }
+
+    if (streaming?.isActive()) {
+      if (info?.kind === "final") {
+        streamText = text;
+        await closeStreaming();
+      }
+      return true;
+    }
+
+    let first = true;
+    if (useCard) {
+      for (const chunk of core.channel.text.chunkTextWithMode(text, textChunkLimit, chunkMode)) {
+        await sendMarkdownCardFeishu({
+          cfg,
+          to: chatId,
+          text: chunk,
+          replyToMessageId,
+          mentions: first ? mentionTargets : undefined,
+          accountId,
+        });
+        first = false;
+      }
+    } else {
+      const converted = core.channel.text.convertMarkdownTables(text, tableMode);
+      for (const chunk of core.channel.text.chunkTextWithMode(
+        converted,
+        textChunkLimit,
+        chunkMode,
+      )) {
+        await sendMessageFeishu({
+          cfg,
+          to: chatId,
+          text: chunk,
+          replyToMessageId,
+          mentions: first ? mentionTargets : undefined,
+          accountId,
+        });
+        first = false;
+      }
+    }
+    return false;
+  };
+
   const { dispatcher, replyOptions, markDispatchIdle } =
     core.channel.reply.createReplyDispatcherWithTyping({
       responsePrefix: prefixContext.responsePrefix,
@@ -138,61 +195,66 @@ export function createFeishuReplyDispatcher(params: CreateFeishuReplyDispatcherP
       },
       deliver: async (payload: ReplyPayload, info) => {
         const text = payload.text ?? "";
-        if (!text.trim()) {
+        const mediaList = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
+        if (!text.trim() && mediaList.length === 0) {
           return;
         }
 
-        const useCard = renderMode === "card" || (renderMode === "auto" && shouldUseCard(text));
-
-        if ((info?.kind === "block" || info?.kind === "final") && streamingEnabled && useCard) {
-          startStreaming();
-          if (streamingStartPromise) {
-            await streamingStartPromise;
-          }
-        }
-
-        if (streaming?.isActive()) {
-          if (info?.kind === "final") {
+        // When media is present: send media first, then text as a note-style caption
+        // replying to the media message (mirrors Telegram's caption-on-media pattern).
+        // If all media sends fail, fall back to normal text delivery.
+        if (mediaList.length > 0) {
+          // Close streaming card before sending media to ensure proper message ordering.
+          if (streaming?.isActive()) {
             streamText = text;
             await closeStreaming();
           }
+          let lastMediaMessageId: string | undefined;
+          let mediaDelivered = false;
+          for (const mediaUrl of mediaList) {
+            if (!mediaUrl) continue;
+            try {
+              const result = await sendMediaFeishu({
+                cfg,
+                to: chatId,
+                mediaUrl,
+                replyToMessageId,
+                accountId,
+              });
+              lastMediaMessageId = result.messageId;
+              mediaDelivered = true;
+            } catch (err) {
+              params.runtime.error?.(
+                `feishu[${account.accountId}] sendMedia failed for ${mediaUrl}: ${String(err)}`,
+              );
+            }
+          }
+          if (!mediaDelivered && text.trim()) {
+            // Fallback: send text normally if all media failed
+            await sendTextPayload(text, info);
+          } else if (mediaDelivered && text.trim()) {
+            // Send text as a note-style caption replying to the media message
+            try {
+              await sendCaptionCardFeishu({
+                cfg,
+                to: chatId,
+                text: text.trim(),
+                replyToMessageId: lastMediaMessageId,
+                mentions: mentionTargets,
+                accountId,
+              });
+            } catch (err) {
+              params.runtime.error?.(
+                `feishu[${account.accountId}] sendCaptionCard failed, falling back to text: ${String(err)}`,
+              );
+              await sendTextPayload(text, info);
+            }
+          }
           return;
         }
 
-        let first = true;
-        if (useCard) {
-          for (const chunk of core.channel.text.chunkTextWithMode(
-            text,
-            textChunkLimit,
-            chunkMode,
-          )) {
-            await sendMarkdownCardFeishu({
-              cfg,
-              to: chatId,
-              text: chunk,
-              replyToMessageId,
-              mentions: first ? mentionTargets : undefined,
-              accountId,
-            });
-            first = false;
-          }
-        } else {
-          const converted = core.channel.text.convertMarkdownTables(text, tableMode);
-          for (const chunk of core.channel.text.chunkTextWithMode(
-            converted,
-            textChunkLimit,
-            chunkMode,
-          )) {
-            await sendMessageFeishu({
-              cfg,
-              to: chatId,
-              text: chunk,
-              replyToMessageId,
-              mentions: first ? mentionTargets : undefined,
-              accountId,
-            });
-            first = false;
-          }
+        if (text.trim()) {
+          await sendTextPayload(text, info);
         }
       },
       onError: async (error, info) => {
