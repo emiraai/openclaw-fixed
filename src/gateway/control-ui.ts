@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveControlUiRootSync } from "../infra/control-ui-assets.js";
+import { isWithinDir } from "../infra/path-safety.js";
 import { DEFAULT_ASSISTANT_IDENTITY, resolveAssistantIdentity } from "./assistant-identity.js";
 import {
   CONTROL_UI_BOOTSTRAP_CONFIG_PATH,
@@ -199,6 +200,9 @@ function isSafeRelativePath(relPath: string) {
     return false;
   }
   const normalized = path.posix.normalize(relPath);
+  if (path.posix.isAbsolute(normalized) || path.win32.isAbsolute(normalized)) {
+    return false;
+  }
   if (normalized.startsWith("../") || normalized === "..") {
     return false;
   }
@@ -206,6 +210,21 @@ function isSafeRelativePath(relPath: string) {
     return false;
   }
   return true;
+}
+
+function resolveIfContainedByRealRoot(root: string, candidatePath: string): string | null {
+  const resolvedCandidate = path.resolve(candidatePath);
+  if (!isWithinDir(root, resolvedCandidate)) {
+    return null;
+  }
+
+  try {
+    const realRoot = fs.realpathSync(root);
+    const realCandidate = fs.realpathSync(resolvedCandidate);
+    return isWithinDir(realRoot, realCandidate) ? realCandidate : null;
+  } catch {
+    return null;
+  }
 }
 
 export function handleControlUiHttpRequest(
@@ -334,18 +353,14 @@ export function handleControlUiHttpRequest(
     return true;
   }
 
-  const filePath = path.join(root, fileRel);
-  if (!filePath.startsWith(root)) {
-    respondNotFound(res);
-    return true;
-  }
-
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    if (path.basename(filePath) === "index.html") {
-      serveIndexHtml(res, filePath);
+  const filePath = path.resolve(root, fileRel);
+  const safeFilePath = resolveIfContainedByRealRoot(root, filePath);
+  if (safeFilePath && fs.existsSync(safeFilePath) && fs.statSync(safeFilePath).isFile()) {
+    if (path.basename(safeFilePath) === "index.html") {
+      serveIndexHtml(res, safeFilePath);
       return true;
     }
-    serveFile(res, filePath);
+    serveFile(res, safeFilePath);
     return true;
   }
 
@@ -360,8 +375,8 @@ export function handleControlUiHttpRequest(
   }
 
   // SPA fallback (client-side router): serve index.html for unknown paths.
-  const indexPath = path.join(root, "index.html");
-  if (fs.existsSync(indexPath)) {
+  const indexPath = resolveIfContainedByRealRoot(root, path.join(root, "index.html"));
+  if (indexPath && fs.existsSync(indexPath)) {
     serveIndexHtml(res, indexPath);
     return true;
   }
