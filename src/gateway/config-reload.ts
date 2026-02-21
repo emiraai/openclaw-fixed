@@ -251,6 +251,7 @@ export function startGatewayConfigReloader(opts: {
   readSnapshot: () => Promise<ConfigFileSnapshot>;
   onHotReload: (plan: GatewayReloadPlan, nextConfig: OpenClawConfig) => Promise<void>;
   onRestart: (plan: GatewayReloadPlan, nextConfig: OpenClawConfig) => void;
+  onInvalidConfig?: (issues: string[]) => void;
   log: {
     info: (msg: string) => void;
     warn: (msg: string) => void;
@@ -295,8 +296,10 @@ export function startGatewayConfigReloader(opts: {
     try {
       const snapshot = await opts.readSnapshot();
       if (!snapshot.valid) {
-        const issues = snapshot.issues.map((issue) => `${issue.path}: ${issue.message}`).join(", ");
+        const issueList = snapshot.issues.map((issue) => `${issue.path}: ${issue.message}`);
+        const issues = issueList.join(", ");
         opts.log.warn(`config reload skipped (invalid config): ${issues}`);
+        opts.onInvalidConfig?.(issueList);
         return;
       }
       const nextConfig = snapshot.config;

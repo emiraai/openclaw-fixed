@@ -712,6 +712,9 @@ export async function startGatewayServer(
           readSnapshot: readConfigFileSnapshot,
           onHotReload: applyHotReload,
           onRestart: requestGatewayRestart,
+          onInvalidConfig: (issues) => {
+            broadcast("config.invalid", { issues }, { dropIfSlow: true });
+          },
           log: {
             info: (msg) => logReload.info(msg),
             warn: (msg) => logReload.warn(msg),
