@@ -1,3 +1,5 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { onAgentEvent } from "../infra/agent-events.js";
@@ -35,6 +37,9 @@ export type SubagentRunRecord = {
   announceRetryCount?: number;
   /** Timestamp of the last announce retry attempt (for backoff). */
   lastAnnounceRetryAt?: number;
+  attachmentsDir?: string;
+  attachmentsRootDir?: string;
+  retainAttachmentsOnKeep?: boolean;
 };
 
 const subagentRuns = new Map<string, SubagentRunRecord>();
@@ -252,6 +257,8 @@ async function sweepSubagentRuns() {
     }
     subagentRuns.delete(runId);
     mutated = true;
+    // Archive/purge is terminal for the run record; remove any retained attachments too.
+    await safeRemoveAttachmentsDir(entry);
     try {
       await callGateway({
         method: "sessions.delete",
@@ -317,6 +324,43 @@ function ensureListener() {
   });
 }
 
+async function safeRemoveAttachmentsDir(entry: SubagentRunRecord): Promise<void> {
+  if (!entry.attachmentsDir || !entry.attachmentsRootDir) {
+    return;
+  }
+
+  const resolveReal = async (targetPath: string): Promise<string | null> => {
+    try {
+      return await fs.realpath(targetPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+        return null;
+      }
+      throw err;
+    }
+  };
+
+  try {
+    const [rootReal, dirReal] = await Promise.all([
+      resolveReal(entry.attachmentsRootDir),
+      resolveReal(entry.attachmentsDir),
+    ]);
+    if (!dirReal) {
+      return;
+    }
+
+    const rootBase = rootReal ?? path.resolve(entry.attachmentsRootDir);
+    const dirBase = rootReal ? dirReal : path.resolve(entry.attachmentsDir);
+    const rootWithSep = rootBase.endsWith(path.sep) ? rootBase : `${rootBase}${path.sep}`;
+    if (!dirBase.startsWith(rootWithSep)) {
+      return;
+    }
+    await fs.rm(dirBase, { recursive: true, force: true });
+  } catch {
+    // best effort
+  }
+}
+
 function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didAnnounce: boolean) {
   const entry = subagentRuns.get(runId);
   if (!entry) {
@@ -354,6 +398,12 @@ function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didA
     ).unref?.();
     return;
   }
+
+  const shouldDeleteAttachments = cleanup === "delete" || !entry.retainAttachmentsOnKeep;
+  if (shouldDeleteAttachments) {
+    void safeRemoveAttachmentsDir(entry);
+  }
+
   if (cleanup === "delete") {
     subagentRuns.delete(runId);
     persistSubagentRuns();
@@ -516,6 +566,9 @@ export function registerSubagentRun(params: {
   model?: string;
   runTimeoutSeconds?: number;
   expectsCompletionMessage?: boolean;
+  attachmentsDir?: string;
+  attachmentsRootDir?: string;
+  retainAttachmentsOnKeep?: boolean;
 }) {
   const now = Date.now();
   const cfg = loadConfig();
@@ -540,6 +593,9 @@ export function registerSubagentRun(params: {
     startedAt: now,
     archiveAtMs,
     cleanupHandled: false,
+    attachmentsDir: params.attachmentsDir,
+    attachmentsRootDir: params.attachmentsRootDir,
+    retainAttachmentsOnKeep: params.retainAttachmentsOnKeep,
   });
   ensureListener();
   persistSubagentRuns();

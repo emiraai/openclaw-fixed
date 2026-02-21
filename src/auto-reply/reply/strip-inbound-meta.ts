@@ -28,7 +28,7 @@ const SENTINEL_FAST_RE = new RegExp(
 );
 
 /**
- * Remove all injected inbound metadata prefix blocks from `text`.
+ * Remove injected inbound metadata blocks from `text`.
  *
  * Each block has the shape:
  *
@@ -39,24 +39,37 @@ const SENTINEL_FAST_RE = new RegExp(
  * ```
  * ```
  *
+ * @param text    - The message text to strip.
+ * @param opts.prefixOnly - When `true`, only strip blocks that appear before
+ *   any real content (leading-prefix mode). Once real content is seen,
+ *   sentinel blocks are left intact. Default: `false` (strip all occurrences).
+ *
  * Returns the original string reference unchanged when no metadata is present
  * (fast path — zero allocation).
  */
-export function stripInboundMetadata(text: string): string {
+export function stripInboundMetadata(text: string, opts?: { prefixOnly?: boolean }): string {
   if (!text || !SENTINEL_FAST_RE.test(text)) {
     return text;
   }
 
+  const prefixOnly = opts?.prefixOnly === true;
   const lines = text.split("\n");
   const result: string[] = [];
   let inMetaBlock = false;
   let inFencedJson = false;
+  // Tracks whether any real content has been collected (used for prefixOnly mode).
+  let seenContent = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Detect start of a metadata block.
-    if (!inMetaBlock && INBOUND_META_SENTINELS.some((s) => line.startsWith(s))) {
+    // In prefixOnly mode: only strip if no real content has been seen yet.
+    if (
+      !inMetaBlock &&
+      (!prefixOnly || !seenContent) &&
+      INBOUND_META_SENTINELS.some((s) => line.startsWith(s))
+    ) {
       inMetaBlock = true;
       inFencedJson = false;
       continue;
@@ -83,6 +96,9 @@ export function stripInboundMetadata(text: string): string {
     }
 
     result.push(line);
+    if (line.trim()) {
+      seenContent = true;
+    }
   }
 
   return result.join("\n").replace(/^\n+/, "");

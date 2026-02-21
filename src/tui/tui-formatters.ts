@@ -275,7 +275,7 @@ export function extractTextFromMessage(
   const text = extractTextBlocks(record.content, opts);
   if (text) {
     if (record.role === "user") {
-      return stripInboundMetadata(text);
+      return stripInboundMetadata(text, { prefixOnly: true });
     }
     return text;
   }
